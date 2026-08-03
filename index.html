@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<title>L&A Construction Manager V6</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#f4f7fb;--card:#fff;--ink:#0f172a;--muted:#64748b;--line:#dbe3ec;--brand:#2563eb;--ok:#16a34a;--bad:#dc2626;--warn:#d97706}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--ink)}
+button,input,select,textarea{font:inherit}button{cursor:pointer}
+header{position:sticky;top:0;z-index:20;background:#0f172a;color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+header h1{font-size:18px;margin:0}header small{color:#cbd5e1}
+main{max-width:1180px;margin:auto;padding:14px 14px 96px}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}.s12{grid-column:span 12}.s8{grid-column:span 8}.s6{grid-column:span 6}.s4{grid-column:span 4}
+.card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:15px;box-shadow:0 8px 26px rgba(15,23,42,.05)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px}.muted{color:var(--muted)}h2,h3{margin:0 0 12px}
+label{display:block;font-size:13px;color:#475569;margin:10px 0 6px}input,select,textarea{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:13px;background:#fff}textarea{min-height:110px}
+.btn{border:0;border-radius:12px;padding:11px 14px;background:var(--brand);color:#fff;font-weight:750}.secondary{background:#e2e8f0;color:#111827}.success{background:var(--ok)}.danger{background:var(--bad)}.warn{background:var(--warn)}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.kpi{background:#f8fafc;border:1px solid var(--line);border-radius:15px;padding:13px}.kpi b{display:block;font-size:23px;margin-top:5px}
+.project{border:1px solid var(--line);border-radius:15px;padding:13px;margin-top:9px}.pill{display:inline-block;font-size:12px;padding:5px 9px;border-radius:999px;background:#eef2ff;color:#3730a3}.pill.ok{background:#ecfdf5;color:#166534}.pill.bad{background:#fef2f2;color:#991b1b}.pill.warn{background:#fff7ed;color:#9a3412}
+.progress{height:8px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin-top:9px}.progress i{display:block;height:100%;background:var(--brand)}
+.preview{white-space:pre-wrap;background:#f8fafc;border:1px solid var(--line);border-radius:14px;padding:13px;min-height:90px}
+.notice{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:10px;border-radius:12px}.error{background:#fef2f2;color:#991b1b;border:1px solid #fecaca;padding:10px;border-radius:12px}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(6,1fr);z-index:30}nav button{border:0;background:#fff;padding:12px 2px;color:#64748b;font-size:12px}nav button.active{color:var(--brand);font-weight:800}
+.page{display:none}.page.active{display:block}.hidden{display:none!important}.authwrap{max-width:520px;margin:40px auto}.toast{position:fixed;left:50%;bottom:82px;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 14px;border-radius:10px;display:none;z-index:50}
+.record{width:100%;padding:19px;border-radius:16px;border:2px dashed #93c5fd;background:#eff6ff;color:#1d4ed8;font-size:17px;font-weight:850}.record.active{background:#fef2f2;color:#b91c1c;border-color:#fca5a5}.timer{text-align:center;font-size:22px;font-weight:800;margin:10px}.audio-box{display:none}.audio-box.show{display:block}audio{width:100%}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+@media(max-width:760px){.s8,.s6,.s4{grid-column:span 12}.kpis{grid-template-columns:repeat(2,1fr)}header{flex-direction:column;align-items:flex-start}nav{grid-template-columns:repeat(6,1fr)}}
+</style>
+</head>
+<body>
+<header><div><h1>L&A Construction Manager V6</h1><small>Supabase cloud • login • GPS time clock • cloud reports</small></div><div id="headerUser"></div></header>
+
+<main>
+<section id="authPage" class="page active"><div class="authwrap card">
+<h2>Sign In</h2><div class="notice">Use your work email. New workers may create an account, then the Owner assigns them to the company and projects.</div>
+<label>Email</label><input id="authEmail" type="email" autocomplete="email">
+<label>Password</label><input id="authPassword" type="password" autocomplete="current-password">
+<div class="row" style="margin-top:12px"><button class="btn" onclick="signIn()">Sign In</button><button class="btn secondary" onclick="signUp()">Create Account</button></div>
+<div id="authError" style="margin-top:10px"></div>
+</div></section>
+
+<section id="onboardingPage" class="page"><div class="authwrap card">
+<h2>Create Company Workspace</h2><p class="muted">Your login exists but is not connected to a company yet.</p>
+<label>Company Name</label><input id="companyName" value="L&A Custom Homes">
+<button class="btn" style="width:100%;margin-top:12px" onclick="bootstrapCompany()">Create Workspace</button>
+<p class="muted">Workers should not create another company. They should wait for the Owner to add their email.</p>
+</div></section>
+
+<section id="dashboard" class="page"><div class="grid">
+<div class="card s12"><div class="row"><div><h2 id="dashTitle">Dashboard</h2><div id="today" class="muted"></div></div><span class="pill ok">Cloud Connected</span></div>
+<div class="kpis"><div class="kpi">Projects<b id="kProjects">0</b></div><div class="kpi">Reports Today<b id="kReports">0</b></div><div class="kpi">Clocked In<b id="kClocked">0</b></div><div class="kpi">Pending Reports<b id="kPending">0</b></div></div></div>
+<div class="card s8"><div class="row"><h3>Projects</h3><button class="btn adminOnly" onclick="go('projects',navButtons[4])">Manage</button></div><div id="projectCards"></div></div>
+<div class="card s4"><h3>My Time Clock</h3><div id="clockStatus" class="preview">Loading…</div><label>Project</label><select id="clockProject"></select><button id="clockBtn" class="btn success" style="width:100%;margin-top:10px" onclick="clockAction()">Clock In</button></div>
+<div class="card s12 managerOnly"><div class="row"><h3>5 PM Project Summary</h3><button class="btn warn" onclick="createEodSummary()">Generate Now</button></div><div id="summaryBox" class="preview">No summary generated yet.</div></div>
+</div></section>
+
+<section id="report" class="page"><div class="grid">
+<div class="card s6"><h2>Daily Report</h2><label>Project</label><select id="reportProject"></select>
+<label>Language</label><select id="language"><option value="fa">Persian</option><option value="en">English</option><option value="es">Spanish</option></select>
+<button id="recordBtn" class="record" onclick="toggleRecording()">🎙 Start Recording</button><div id="timer" class="timer">00:00</div>
+<div id="audioBox" class="audio-box"><audio id="audioPlayer" controls></audio></div>
+<label>Typed Notes</label><textarea id="notes" dir="rtl"></textarea><label>Progress %</label><input id="progress" type="number" min="0" max="100">
+<button id="reportBtn" class="btn success" style="width:100%;margin-top:12px" onclick="submitReport()">Create & Save Cloud Report</button><div id="reportError"></div></div>
+<div class="card s6"><h2>English Report</h2><div id="englishOut" class="preview"></div><h3 style="margin-top:14px">Analysis</h3><div id="analysisOut" class="preview"></div></div>
+</div></section>
+
+<section id="history" class="page"><div class="card"><h2>Cloud Report History</h2><div id="historyTable"></div></div></section>
+
+<section id="approvals" class="page managerOnly"><div class="card"><h2>Pending Approvals</h2><div id="approvalTable"></div></div></section>
+
+<section id="projects" class="page adminOnly"><div class="grid">
+<div class="card s4"><h2>Add Project</h2><label>Name</label><input id="pName"><label>Address</label><input id="pAddress"><label>Current Phase</label><input id="pPhase" value="Preconstruction"><label>GPS Radius (meters)</label><input id="pRadius" type="number" value="152">
+<button class="btn secondary" style="width:100%;margin-top:10px" onclick="captureProjectLocation()">Use My Current GPS</button>
+<div id="gpsPreview" class="muted" style="margin-top:8px"></div><button class="btn" style="width:100%;margin-top:10px" onclick="createProject()">Create Cloud Project</button></div>
+<div class="card s8"><h2>Projects</h2><div id="projectAdminTable"></div></div>
+</div></section>
+
+<section id="users" class="page adminOnly"><div class="grid">
+<div class="card s4"><h2>Add Existing User</h2><p class="muted">The worker must create an account first using the exact email.</p><label>Email</label><input id="memberEmail"><label>Role</label><select id="memberRole"><option value="project_manager">Project Manager</option><option value="foreman_employee">Foreman / Employee</option><option value="viewer">Viewer</option></select><button class="btn" style="width:100%;margin-top:10px" onclick="addMember()">Add to Company</button>
+<h3 style="margin-top:20px">Assign to Project</h3><label>User Email</label><input id="assignEmail"><label>Project</label><select id="assignProject"></select><button class="btn secondary" style="width:100%;margin-top:10px" onclick="assignProject()">Assign Project</button></div>
+<div class="card s8"><h2>Company Users</h2><div id="membersTable"></div></div>
+</div></section>
+
+<section id="settings" class="page"><div class="card"><h2>Account</h2><div id="accountInfo"></div><button class="btn danger" onclick="signOut()">Sign Out</button></div></section>
+</main>
+
+<nav id="nav" class="hidden">
+<button class="active" onclick="go('dashboard',this)">Dashboard</button><button onclick="go('report',this)">Report</button><button onclick="go('history',this)">History</button><button class="managerOnly" onclick="go('approvals',this)">Approvals</button><button class="adminOnly" onclick="go('projects',this)">Projects</button><button onclick="go('settings',this)">Settings</button>
+</nav>
+<div id="toast" class="toast"></div>
+
+<script>
+let sb=null,session=null,membership=null,company=null,projects=[],reports=[],members=[],activeEntry=null;
+let projectGps=null,recorder=null,stream=null,chunks=[],audioBlob=null,timerInt=null,startTime=0;
+const navButtons=[...document.querySelectorAll('#nav button')];
+
+function toast(x){const t=document.getElementById('toast');t.textContent=x;t.style.display='block';setTimeout(()=>t.style.display='none',2200)}
+function esc(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function go(id,b){document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));if(b)b.classList.add('active')}
+function isManager(){return ['owner_admin','project_manager'].includes(membership?.role)}
+function isAdmin(){return membership?.role==='owner_admin'}
+function applyPermissions(){document.querySelectorAll('.managerOnly').forEach(x=>x.classList.toggle('hidden',!isManager()));document.querySelectorAll('.adminOnly').forEach(x=>x.classList.toggle('hidden',!isAdmin()))}
+
+async function init(){
+ try{
+   const r=await fetch('/.netlify/functions/supabase-config',{cache:'no-store'}),cfg=await r.json();
+   if(!r.ok)throw new Error(cfg.error||'Supabase configuration missing');
+   sb=supabase.createClient(cfg.url,cfg.key);
+   const {data}=await sb.auth.getSession();session=data.session;
+   sb.auth.onAuthStateChange((_e,s)=>{session=s;if(!s)showAuth()});
+   if(session)await loadApp();else showAuth();
+ }catch(e){document.getElementById('authError').innerHTML='<div class="error">'+esc(e.message)+'</div>'}
+}
+function showAuth(){document.getElementById('nav').classList.add('hidden');go('authPage')}
+async function signIn(){
+ const email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value;
+ const {data,error}=await sb.auth.signInWithPassword({email,password});if(error)return showAuthError(error.message);session=data.session;await loadApp()
+}
+async function signUp(){
+ const email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value;
+ const {data,error}=await sb.auth.signUp({email,password,options:{data:{full_name:email.split('@')[0]}}});if(error)return showAuthError(error.message);
+ toast(data.session?'Account created.':'Check your email to confirm the account.');if(data.session){session=data.session;await loadApp()}
+}
+function showAuthError(x){document.getElementById('authError').innerHTML='<div class="error">'+esc(x)+'</div>'}
+async function signOut(){await sb.auth.signOut();location.reload()}
+
+async function loadApp(){
+ const {data:m,error}=await sb.from('company_members').select('*, companies(*)').eq('user_id',session.user.id).eq('is_active',true).maybeSingle();
+ if(error)return showAuthError(error.message);
+ if(!m){document.getElementById('nav').classList.add('hidden');go('onboardingPage');return}
+ membership=m;company=m.companies;document.getElementById('nav').classList.remove('hidden');applyPermissions();await refreshAll();go('dashboard',navButtons[0])
+}
+async function bootstrapCompany(){
+ const name=document.getElementById('companyName').value.trim();const {data,error}=await sb.rpc('bootstrap_company',{p_company_name:name});
+ if(error)return toast(error.message);toast('Workspace created.');await loadApp()
+}
+async function refreshAll(){
+ const [pRes,rRes,tRes,mRes]=await Promise.all([
+   sb.from('projects').select('*').order('created_at'),
+   sb.from('daily_reports').select('*').order('created_at',{ascending:false}).limit(100),
+   sb.from('time_entries').select('*, projects(name)').is('clock_out_at',null),
+   isAdmin()?sb.from('company_members').select('*, profiles(full_name), companies(name)').eq('company_id',company.id):Promise.resolve({data:[]})
+ ]);
+ projects=pRes.data||[];reports=rRes.data||[];members=mRes.data||[];activeEntry=(tRes.data||[]).find(x=>x.user_id===session.user.id)||null;render()
+}
+function render(){
+ document.getElementById('headerUser').innerHTML='<span class="pill ok">'+esc(session.user.email)+'</span>';
+ document.getElementById('dashTitle').textContent=company.name+' — '+membership.role.replaceAll('_',' ');
+ document.getElementById('today').textContent=new Date().toLocaleDateString('en-US',{dateStyle:'full'});
+ const today=new Date().toISOString().slice(0,10);
+ document.getElementById('kProjects').textContent=projects.length;document.getElementById('kReports').textContent=reports.filter(r=>r.report_date===today).length;document.getElementById('kClocked').textContent=activeEntry?1:0;document.getElementById('kPending').textContent=reports.filter(r=>r.status==='pending').length;
+ document.getElementById('projectCards').innerHTML=projects.map(p=>`<div class="project"><div class="row"><div><b>${esc(p.name)}</b><div class="muted">${esc(p.address)}</div></div><span class="pill">${esc(p.current_phase)}</span></div><div class="row"><span>Progress</span><b>${p.progress_percent}%</b></div><div class="progress"><i style="width:${p.progress_percent}%"></i></div></div>`).join('')||'<div class="muted">No projects assigned.</div>';
+ const opts=projects.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');document.getElementById('clockProject').innerHTML=opts;document.getElementById('reportProject').innerHTML=opts;document.getElementById('assignProject').innerHTML=opts;
+ document.getElementById('clockStatus').textContent=activeEntry?`Clocked in at ${new Date(activeEntry.clock_in_at).toLocaleTimeString()} — ${activeEntry.projects?.name||''}`:'Not clocked in.';
+ document.getElementById('clockBtn').textContent=activeEntry?'Clock Out':'Clock In';document.getElementById('clockBtn').className='btn '+(activeEntry?'danger':'success');
+ document.getElementById('historyTable').innerHTML=reports.length?`<table><tr><th>Date</th><th>Project</th><th>Status</th><th>Report</th></tr>${reports.map(r=>`<tr><td>${r.report_date}</td><td>${esc(projects.find(p=>p.id===r.project_id)?.name||'')}</td><td>${esc(r.status)}</td><td>${esc(r.english_report)}</td></tr>`).join('')}</table>`:'No reports.';
+ if(isManager()){const pending=reports.filter(r=>r.status==='pending');document.getElementById('approvalTable').innerHTML=pending.length?`<table><tr><th>Project</th><th>Report</th><th>Action</th></tr>${pending.map(r=>`<tr><td>${esc(projects.find(p=>p.id===r.project_id)?.name||'')}</td><td>${esc(r.english_report)}</td><td><button class="btn success" onclick="reviewReport('${r.id}',true)">Approve</button> <button class="btn danger" onclick="reviewReport('${r.id}',false)">Reject</button></td></tr>`).join('')}</table>`:'No pending reports.'}
+ if(isAdmin()){document.getElementById('projectAdminTable').innerHTML=projects.map(p=>`<div class="project"><b>${esc(p.name)}</b><div>${esc(p.address)}</div><div class="muted">GPS: ${p.latitude??'not set'}, ${p.longitude??'not set'} • Radius ${p.geofence_radius_m}m</div></div>`).join('');document.getElementById('membersTable').innerHTML=members.length?`<table><tr><th>User</th><th>Role</th></tr>${members.map(m=>`<tr><td>${esc(m.profiles?.full_name||m.user_id)}</td><td>${esc(m.role)}</td></tr>`).join('')}</table>`:'No members.'}
+ document.getElementById('accountInfo').innerHTML=`<p><b>${esc(session.user.email)}</b></p><p>Company: ${esc(company.name)}</p><p>Role: ${esc(membership.role)}</p>`;
+}
+async function captureProjectLocation(){navigator.geolocation.getCurrentPosition(p=>{projectGps={lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy};document.getElementById('gpsPreview').textContent=`${projectGps.lat.toFixed(6)}, ${projectGps.lng.toFixed(6)} • accuracy ${Math.round(projectGps.accuracy)}m`},e=>toast(e.message),{enableHighAccuracy:true,timeout:15000})}
+async function createProject(){
+ if(!projectGps)return toast('Capture GPS first.');
+ const payload={company_id:company.id,name:document.getElementById('pName').value.trim(),address:document.getElementById('pAddress').value.trim(),current_phase:document.getElementById('pPhase').value.trim(),geofence_radius_m:+document.getElementById('pRadius').value||152,latitude:projectGps.lat,longitude:projectGps.lng,created_by:session.user.id};
+ const {error}=await sb.from('projects').insert(payload);if(error)return toast(error.message);toast('Project created.');await refreshAll()
+}
+async function addMember(){const {error}=await sb.rpc('add_company_member_by_email',{p_company_id:company.id,p_email:document.getElementById('memberEmail').value.trim(),p_role:document.getElementById('memberRole').value});if(error)return toast(error.message);toast('User added.');await refreshAll()}
+async function assignProject(){const {error}=await sb.rpc('assign_project_member_by_email',{p_project_id:document.getElementById('assignProject').value,p_email:document.getElementById('assignEmail').value.trim()});if(error)return toast(error.message);toast('Project assigned.')}
+async function getGps(){return new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(p=>resolve(p.coords),reject,{enableHighAccuracy:true,timeout:15000,maximumAge:0}))}
+async function clockAction(){
+ try{const c=await getGps();if(activeEntry){const {error}=await sb.rpc('clock_out',{p_latitude:c.latitude,p_longitude:c.longitude,p_accuracy_m:c.accuracy,p_break_minutes:0});if(error)throw error;toast('Clocked out.')}else{const {error}=await sb.rpc('clock_in',{p_project_id:document.getElementById('clockProject').value,p_latitude:c.latitude,p_longitude:c.longitude,p_accuracy_m:c.accuracy});if(error)throw error;toast('Clocked in.')}await refreshAll()}catch(e){toast(e.message)}
+}
+async function toggleRecording(){
+ if(recorder&&recorder.state==='recording'){recorder.stop();return}
+ try{stream=await navigator.mediaDevices.getUserMedia({audio:true});let type=MediaRecorder.isTypeSupported('audio/mp4')?'audio/mp4':'audio/webm';recorder=new MediaRecorder(stream,{mimeType:type});chunks=[];recorder.ondataavailable=e=>chunks.push(e.data);recorder.onstop=()=>{audioBlob=new Blob(chunks,{type});document.getElementById('audioPlayer').src=URL.createObjectURL(audioBlob);document.getElementById('audioBox').classList.add('show');document.getElementById('recordBtn').textContent='🎙 Record Again';document.getElementById('recordBtn').classList.remove('active');clearInterval(timerInt);stream.getTracks().forEach(t=>t.stop())};recorder.start();startTime=Date.now();document.getElementById('recordBtn').textContent='⏹ Stop Recording';document.getElementById('recordBtn').classList.add('active');timerInt=setInterval(()=>{let s=Math.floor((Date.now()-startTime)/1000);document.getElementById('timer').textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')},500)}catch(e){toast(e.message)}
+}
+async function submitReport(){
+ const projectId=document.getElementById('reportProject').value,notes=document.getElementById('notes').value.trim();if(!audioBlob&&!notes)return toast('Record audio or enter notes.');
+ try{const fd=new FormData();if(audioBlob)fd.append('audio',audioBlob,'report.m4a');fd.append('notes',notes);fd.append('language',document.getElementById('language').value);fd.append('project',projects.find(p=>p.id===projectId)?.name||'');
+ const res=await fetch('/.netlify/functions/process-report',{method:'POST',body:fd}),data=await res.json();if(!res.ok)throw new Error(data.error);
+ const status=isManager()?'approved':'pending';const {error}=await sb.from('daily_reports').insert({company_id:company.id,project_id:projectId,submitted_by:session.user.id,source_language:document.getElementById('language').value,raw_transcript:notes,english_report:data.englishReport,completed_items:data.completed,labor_items:data.labor,blockers:data.blockers,inspections:data.inspection,next_actions:data.nextActions,progress_percent:+document.getElementById('progress').value||null,status});if(error)throw error;
+ document.getElementById('englishOut').textContent=data.englishReport;document.getElementById('analysisOut').textContent=`Completed: ${(data.completed||[]).join('; ')}\nLabor: ${(data.labor||[]).join('; ')}\nBlockers: ${(data.blockers||[]).join('; ')}\nNext: ${(data.nextActions||[]).join('; ')}`;toast('Cloud report saved.');await refreshAll()}catch(e){document.getElementById('reportError').innerHTML='<div class="error">'+esc(e.message)+'</div>'}
+}
+async function reviewReport(id,approve){const {error}=await sb.rpc('review_report',{p_report_id:id,p_approve:approve,p_rejection_reason:approve?null:'Rejected by manager'});if(error)return toast(error.message);toast(approve?'Approved.':'Rejected.');await refreshAll()}
+async function createEodSummary(){
+ const today=new Date().toISOString().slice(0,10),approved=reports.filter(r=>r.report_date===today&&r.status==='approved');if(!approved.length)return toast('No approved reports today.');
+ const res=await fetch('/.netlify/functions/eod-summary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:today,projects,reports:approved})}),data=await res.json();if(!res.ok)return toast(data.error);
+ document.getElementById('summaryBox').textContent=data.summary;toast('Summary created.')}
+init();
+</script>
+</body>
+</html>
