@@ -31,14 +31,18 @@ export async function showDashboard({ supabase, session }) {
 
   const { data: membership, error: membershipError } = await supabase
     .from("company_members")
-    .select("role, companies(id, name)")
+    .select("*, companies(*)")
     .eq("user_id", session.user.id)
     .eq("is_active", true)
     .maybeSingle();
 
   if (membershipError) {
-    message.textContent = "Your account is connected, but workspace details could not be loaded.";
+    console.error("Unable to load workspace membership", membershipError);
+    message.textContent = "Your account is connected. Company workspace setup is still required.";
+    message.classList.remove("message-error");
     message.hidden = false;
+    document.querySelector("#projectCount").textContent = "0";
+    document.querySelector("#roleLabel").textContent = "Member";
     return;
   }
 
