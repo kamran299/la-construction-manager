@@ -70,6 +70,9 @@
           <a class="nav-item is-active" href="#dashboard" aria-current="page">
             <span aria-hidden="true">⌂</span> Dashboard
           </a>
+          <a id="projectsNav" class="nav-item" href="#projects">
+            <span aria-hidden="true">▦</span> Projects
+          </a>
         </nav>
         <div class="sidebar-account">
           <span id="userInitial" class="avatar" aria-hidden="true">U</span>
@@ -120,6 +123,30 @@
           <h2>Dashboard foundation is ready</h2>
           <p>Projects, reports, time clock, and team tools will appear here as their modules are added.</p>
         </section>
+      </section>
+
+      <section id="projectsView" class="dashboard-content" aria-labelledby="projectsTitle" hidden>
+        <header class="dashboard-header">
+          <div><p class="eyebrow">Project management</p><h1 id="projectsTitle">Projects</h1></div>
+          <button id="backToDashboard" class="secondary-button" type="button">Dashboard</button>
+        </header>
+        <div id="projectsMessage" class="message message-error" role="alert" hidden></div>
+        <div class="projects-grid">
+          <section class="project-form-card">
+            <h2>Create project</h2>
+            <p>Each new project starts with a complete construction phase plan.</p>
+            <form id="projectForm">
+              <label for="projectName">Project name</label>
+              <input id="projectName" name="name" required>
+              <label for="projectAddress">Address</label>
+              <input id="projectAddress" name="address">
+              <button id="createProjectButton" class="primary-button" type="submit">Create project</button>
+            </form>
+          </section>
+          <section>
+            <div id="projectsList" class="projects-list"></div>
+          </section>
+        </div>
       </section>
     </main>
   </body>

@@ -1,3 +1,5 @@
+import { createProjectsModule } from "./projects.js";
+
 const ROLE_NAMES = {
   owner_admin: "Owner / Admin",
   project_manager: "Project Manager",
@@ -63,4 +65,10 @@ export async function showDashboard({ supabase, session }) {
     .eq("company_id", membership.companies.id);
 
   document.querySelector("#projectCount").textContent = projectError ? "—" : String(count ?? 0);
+  createProjectsModule({
+    supabase,
+    companyId: membership.companies.id,
+    canManage: ["owner_admin", "project_manager"].includes(membership.role),
+    onCountChange: (nextCount) => { document.querySelector("#projectCount").textContent = String(nextCount); },
+  });
 }
