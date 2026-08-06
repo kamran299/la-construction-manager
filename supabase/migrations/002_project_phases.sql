@@ -55,14 +55,14 @@ create or replace function public.recalculate_project_progress()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare target_project_id uuid;
 begin
-  target_project_id := coalesce(new.project_id, old.project_id);
+  target_project_id := case when tg_op = 'DELETE' then old.project_id else new.project_id end;
   update public.projects
   set progress_percent = coalesce((
     select round(sum(progress_percent * weight) / nullif(sum(weight), 0))::integer
     from public.project_phases where project_id = target_project_id
   ), 0)
   where id = target_project_id;
-  return coalesce(new, old);
+  return null;
 end $$;
 
 drop trigger if exists project_phase_progress_changed on public.project_phases;
