@@ -1,6 +1,6 @@
 # L&A Construction Manager
 
-The `development` branch is being rebuilt as a modular web application. The current milestone contains the project foundation and the Supabase email/password login module only.
+The `development` branch is being rebuilt as a modular web application. The current milestone contains the project foundation, Supabase email/password login, and the authenticated dashboard foundation.
 
 ## Structure
 
@@ -27,6 +27,6 @@ The publishable key is intentionally returned to the browser. Never expose a Sup
 
 ## Current scope
 
-Implemented: responsive login UI, client-side validation, password visibility control, persisted Supabase authentication, loading state, and safe user-facing errors.
+Implemented: responsive login UI, client-side validation, password visibility control, persisted Supabase authentication, loading state, safe user-facing errors, authenticated dashboard, company and role summary, project count, and sign out.
 
-Deferred: account creation, password recovery, onboarding, dashboard, projects, reports, time clock, approvals, and user management.
+Deferred: account creation, password recovery, onboarding, project management, reports, time clock, approvals, and user management.

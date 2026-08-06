@@ -8,10 +8,11 @@
     <title>Sign in | L&A Construction Manager</title>
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/login.css">
+    <link rel="stylesheet" href="/css/dashboard.css">
     <script type="module" src="/js/app.js"></script>
   </head>
   <body>
-    <main class="login-layout">
+    <main id="loginView" class="login-layout">
       <section class="brand-panel" aria-labelledby="brand-title">
         <div class="brand-mark" aria-hidden="true">L&amp;A</div>
         <div>
@@ -56,6 +57,69 @@
 
           <p class="support-copy">Need access? Contact your company administrator.</p>
         </div>
+      </section>
+    </main>
+
+    <main id="dashboardView" class="dashboard-layout" hidden>
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <div class="sidebar-mark" aria-hidden="true">L&amp;A</div>
+          <div><strong>Construction</strong><span>Manager</span></div>
+        </div>
+        <nav aria-label="Main navigation">
+          <a class="nav-item is-active" href="#dashboard" aria-current="page">
+            <span aria-hidden="true">⌂</span> Dashboard
+          </a>
+        </nav>
+        <div class="sidebar-account">
+          <span id="userInitial" class="avatar" aria-hidden="true">U</span>
+          <div><strong id="sidebarUserName">User</strong><span id="sidebarUserRole">Member</span></div>
+        </div>
+      </aside>
+
+      <section class="dashboard-content" aria-labelledby="dashboardTitle">
+        <header class="dashboard-header">
+          <div>
+            <p class="eyebrow">L&amp;A Construction Manager</p>
+            <h1 id="dashboardTitle">Dashboard</h1>
+          </div>
+          <button id="signOutButton" class="secondary-button" type="button">Sign out</button>
+        </header>
+
+        <div id="dashboardMessage" class="message message-error" role="alert" hidden></div>
+
+        <section class="welcome-card">
+          <div>
+            <p id="todayLabel" class="welcome-date"></p>
+            <h2>Welcome back, <span id="welcomeName">there</span>.</h2>
+            <p id="companyLabel">Your construction workspace is ready.</p>
+          </div>
+          <span class="status-pill"><i aria-hidden="true"></i> Cloud connected</span>
+        </section>
+
+        <section class="metric-grid" aria-label="Workspace overview">
+          <article class="metric-card">
+            <span class="metric-label">Projects</span>
+            <strong id="projectCount">—</strong>
+            <span class="metric-note">Available to your account</span>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">Account role</span>
+            <strong id="roleLabel" class="role-value">—</strong>
+            <span class="metric-note">Workspace permissions</span>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">System status</span>
+            <strong class="status-value">Online</strong>
+            <span class="metric-note">Supabase connected</span>
+          </article>
+        </section>
+
+        <section class="empty-card">
+          <div class="empty-icon" aria-hidden="true">⌂</div>
+          <h2>Dashboard foundation is ready</h2>
+          <p>Projects, reports, time clock, and team tools will appear here as their modules are added.</p>
+        </section>
       </section>
     </main>
   </body>
