@@ -17,6 +17,28 @@ function parseModelJson(text) {
   return JSON.parse(cleaned);
 }
 
+const INCOMPLETE_WORK = /\b(start(?:ed|ing)?|began|beginning|underway|in progress|scheduled|planned|pending|will|to be)\b/i;
+
+function completedClauses(value) {
+  return String(value || "")
+    .split(/(?<=[.!?])\s+|;\s*/)
+    .map((part) => part.trim())
+    .filter((part) => part && !INCOMPLETE_WORK.test(part));
+}
+
+function sanitizeReport(report) {
+  const completed = (Array.isArray(report.completed) ? report.completed : []).flatMap(completedClauses);
+  return { ...report, completed };
+}
+
+function sanitizeSummary(summary) {
+  const completedWork = (Array.isArray(summary.completed_work) ? summary.completed_work : []).flatMap((item) => {
+    const clauses = completedClauses(item?.details);
+    return clauses.length ? [{ ...item, details: clauses.join(" ") }] : [];
+  });
+  return { ...summary, completed_work: completedWork };
+}
+
 const CONSTRUCTION_GLOSSARY = `
 Apply this L&A Custom Homes glossary exactly:
 Poly (پُلی/پلی) is a person's name, never plate compactor. Subfloor (ساب فلور/ساب‌فلور) means subfloor, never scaffolding. تراک کانکریت means a truckload of concrete.
@@ -88,14 +110,14 @@ Use an empty array for every category not explicitly mentioned.`;
   if (!text) return json(502, { error: "The AI service returned an empty response. Please try again." });
   if (isSummary) {
     try {
-      const dailySummary = parseModelJson(text);
+      const dailySummary = sanitizeSummary(parseModelJson(text));
       return json(200, { daily_summary: dailySummary, english_summary: JSON.stringify(dailySummary) });
     } catch {
       return json(502, { error: "The daily analysis could not be structured. Please try again." });
     }
   }
   try {
-    const report = parseModelJson(text);
+    const report = sanitizeReport(parseModelJson(text));
     return json(200, { ...report, structured_report: report });
   } catch {
     return json(502, { error: "The AI report could not be structured. Please try again." });
