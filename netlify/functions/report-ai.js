@@ -20,9 +20,11 @@ function parseModelJson(text) {
 const INCOMPLETE_WORK = /\b(start(?:ed|ing)?|began|beginning|underway|in progress|scheduled|planned|pending|will|to be)\b/i;
 const COMPLETION_EVIDENCE = /\b(completed?|finished|done|resolved|installed|delivered|passed|repaired|corrected|closed)\b/i;
 const MATERIAL_ACTION = /\b(order(?:ed|ing)?|buy|purchase(?:d|ing)?|procure(?:d|ment|ing)?|source|material(?:s)?\s+(?:needed|required|missing|insufficient))\b/i;
+const MATERIAL_ALREADY_AVAILABLE = /\b(delivered|received|purchased|bought|available|on[- ]?site|awaiting (?:pickup|installation)|waiting (?:for )?(?:pickup|installation))\b/i;
+const LABOR_NOT_YET_PERFORMED = /\b(will|scheduled|plans? to|pending|to (?:pick|deliver|install|start|begin|return|come|reinstall))\b/i;
 
 function materialKey(value) {
-  const ignored = new Set(["a", "an", "the", "to", "for", "material", "materials", "need", "needed", "needs", "require", "required", "missing", "insufficient", "order", "ordered", "ordering", "buy", "purchase", "purchased", "purchasing", "procure", "procured", "procurement", "procuring", "source"]);
+  const ignored = new Set(["a", "an", "the", "to", "be", "is", "are", "was", "were", "must", "should", "for", "material", "materials", "need", "needed", "needs", "require", "required", "missing", "insufficient", "order", "ordered", "ordering", "buy", "purchase", "purchased", "purchasing", "procure", "procured", "procurement", "procuring", "source"]);
   return String(value || "").toLowerCase().match(/[a-z0-9]+/g)?.filter((word) => !ignored.has(word)).sort().join(" ") || "";
 }
 
@@ -62,7 +64,12 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
     carryover_id: task.carryover_id,
   }));
   const finalTomorrowPlan = [...tomorrowPlan, ...requiredCarryovers];
-  const materialsNeeded = Array.isArray(summary.materials_needed) ? [...summary.materials_needed] : [];
+  const materialsNeeded = (Array.isArray(summary.materials_needed) ? summary.materials_needed : []).filter((item) =>
+    !MATERIAL_ALREADY_AVAILABLE.test(String(item?.details || "")) || MATERIAL_ACTION.test(String(item?.details || ""))
+  );
+  const labor = (Array.isArray(summary.labor) ? summary.labor : []).filter((item) =>
+    !LABOR_NOT_YET_PERFORMED.test(String(item?.details || ""))
+  );
   finalTomorrowPlan.filter((item) => MATERIAL_ACTION.test(String(item?.details || ""))).forEach((item) => {
     const project = String(item.project || "General").toLowerCase();
     const key = materialKey(item.details);
@@ -76,7 +83,7 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
     }
     materialsNeeded.push({ ...item, evidence: item.evidence || item.details });
   });
-  return { ...summary, completed_work: completedWork, inspections, tomorrow_plan: finalTomorrowPlan, materials_needed: materialsNeeded };
+  return { ...summary, completed_work: completedWork, inspections, tomorrow_plan: finalTomorrowPlan, labor, materials_needed: materialsNeeded };
 }
 
 const CONSTRUCTION_GLOSSARY = `
