@@ -21,6 +21,11 @@ const INCOMPLETE_WORK = /\b(start(?:ed|ing)?|began|beginning|underway|in progres
 const COMPLETION_EVIDENCE = /\b(completed?|finished|done|resolved|installed|delivered|passed|repaired|corrected|closed)\b/i;
 const MATERIAL_ACTION = /\b(order(?:ed|ing)?|buy|purchase(?:d|ing)?|procure(?:d|ment|ing)?|source|material(?:s)?\s+(?:needed|required|missing|insufficient))\b/i;
 
+function materialKey(value) {
+  const ignored = new Set(["a", "an", "the", "to", "for", "material", "materials", "need", "needed", "needs", "require", "required", "missing", "insufficient", "order", "ordered", "ordering", "buy", "purchase", "purchased", "purchasing", "procure", "procured", "procurement", "procuring", "source"]);
+  return String(value || "").toLowerCase().match(/[a-z0-9]+/g)?.filter((word) => !ignored.has(word)).sort().join(" ") || "";
+}
+
 function completedClauses(value) {
   return String(value || "")
     .split(/(?<=[.!?])\s+|;\s*/)
@@ -58,14 +63,18 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
   }));
   const finalTomorrowPlan = [...tomorrowPlan, ...requiredCarryovers];
   const materialsNeeded = Array.isArray(summary.materials_needed) ? [...summary.materials_needed] : [];
-  const materialCarryoverIds = new Set(materialsNeeded.map((item) => item?.carryover_id).filter(Boolean));
-  const materialSignatures = new Set(materialsNeeded.map((item) => `${String(item?.project || "General").toLowerCase()}::${String(item?.details || "").toLowerCase()}`));
   finalTomorrowPlan.filter((item) => MATERIAL_ACTION.test(String(item?.details || ""))).forEach((item) => {
-    const signature = `${String(item.project || "General").toLowerCase()}::${String(item.details || "").toLowerCase()}`;
-    if ((item.carryover_id && materialCarryoverIds.has(item.carryover_id)) || materialSignatures.has(signature)) return;
+    const project = String(item.project || "General").toLowerCase();
+    const key = materialKey(item.details);
+    const existingIndex = materialsNeeded.findIndex((material) =>
+      (item.carryover_id && material?.carryover_id === item.carryover_id)
+      || (String(material?.project || "General").toLowerCase() === project && key && materialKey(material?.details) === key)
+    );
+    if (existingIndex >= 0) {
+      materialsNeeded[existingIndex] = { ...materialsNeeded[existingIndex], source: item.source, source_date: item.source_date, carryover_id: item.carryover_id };
+      return;
+    }
     materialsNeeded.push({ ...item, evidence: item.evidence || item.details });
-    if (item.carryover_id) materialCarryoverIds.add(item.carryover_id);
-    materialSignatures.add(signature);
   });
   return { ...summary, completed_work: completedWork, inspections, tomorrow_plan: finalTomorrowPlan, materials_needed: materialsNeeded };
 }
