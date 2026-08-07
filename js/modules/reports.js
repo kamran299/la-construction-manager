@@ -120,11 +120,33 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     reports = data || [];
     list.innerHTML = reports.length ? reports.map((r) => {
       const project = projects.find((p) => p.id === r.project_id);
-      return `<article class="workspace-card report-card"><header><div><strong>${escapeHtml(r.reporter_name)}</strong><small>${escapeHtml(r.reporter_email || "")}</small></div><span>${escapeHtml(project?.name || "General")}</span></header><div class="report-original" dir="auto">${escapeHtml(r.original_text)}</div><div class="report-english"><b>English</b><p>${escapeHtml(r.english_text)}</p><small>${escapeHtml(r.english_summary)}</small></div></article>`;
+      const canDelete = canManage || r.reporter_id === session.user.id;
+      return `<article class="workspace-card report-card"><header><div><strong>${escapeHtml(r.reporter_name)}</strong><small>${escapeHtml(r.reporter_email || "")}</small></div><div class="report-card-actions"><span>${escapeHtml(project?.name || "General")}</span>${canDelete ? `<button class="report-delete-button" type="button" data-delete-report="${r.id}">Delete</button>` : ""}</div></header><div class="report-english report-english-only"><p>${escapeHtml(r.english_text)}</p><small>${escapeHtml(r.english_summary)}</small></div></article>`;
     }).join("") : '<div class="empty-projects">No reports were submitted for this date.</div>';
+    list.querySelectorAll("[data-delete-report]").forEach((button) => {
+      button.addEventListener("click", () => deleteReport(button.dataset.deleteReport, button));
+    });
     const { data: saved } = await supabase.from("daily_report_summaries").select("english_summary").eq("company_id", companyId).eq("report_date", filterDate.value).maybeSingle();
     summary.hidden = !saved;
     if (saved) summary.innerHTML = `<h2>End-of-day summary</h2><p>${escapeHtml(saved.english_summary)}</p>`;
+  }
+
+  async function deleteReport(reportId, button) {
+    const report = reports.find((item) => item.id === reportId);
+    if (!report || !globalThis.confirm("Delete this report permanently?")) return;
+    button.disabled = true;
+    button.textContent = "Deleting...";
+    message.hidden = true;
+    const { error } = await supabase.from("daily_reports").delete().eq("id", reportId);
+    if (error) {
+      button.disabled = false;
+      button.textContent = "Delete";
+      message.textContent = "The report could not be deleted.";
+      message.classList.add("message-error");
+      message.hidden = false;
+      return;
+    }
+    await loadReports();
   }
 
   form.addEventListener("submit", async (event) => {
