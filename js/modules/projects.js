@@ -1,5 +1,5 @@
 import { enableAddressAutocomplete } from "../services/google-maps.js";
-import { DEFAULT_PHASES, buildProjectTasks } from "../data/construction-template.js";
+import { buildProjectTasks, getProjectTemplate } from "../data/construction-template.js";
 
 function escapeHtml(value) {
   return String(value || "").replace(/[&<>"']/g, (character) => ({
@@ -42,6 +42,7 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
   let isRepairingTasks = false;
   let loadedProjects = [];
   let selectedProjectId = null;
+  const openPhaseIds = new Set();
 
   async function loadProjects() {
     const { data, error } = await supabase
@@ -129,8 +130,9 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
       <div class="project-card-header"><div><h2>Construction plan</h2><div class="project-address">${escapeHtml(project.address || "No address")}</div></div><div class="overall-progress">${project.progress_percent}%</div></div>
       <div class="phase-list">${phases.map((phase) => {
         const tasks = [...(phase.project_tasks || [])].sort((a, b) => a.sort_order - b.sort_order);
-        return `<details class="phase-group">
+        return `<details class="phase-group" data-phase-group="${phase.id}" ${openPhaseIds.has(phase.id) ? "open" : ""}>
             <summary><span>${escapeHtml(phase.name)}</span><span class="phase-summary-progress"><i style="--progress:${phase.progress_percent}%"></i><strong>${phase.progress_percent}%</strong></span></summary>
+            ${canManage && tasks.length ? `<div class="phase-bulk-progress"><label>Set entire phase</label><input type="range" min="0" max="100" step="5" value="${phase.progress_percent}" data-phase-progress="${phase.id}"><strong>${phase.progress_percent}%</strong><button type="button" data-complete-phase="${phase.id}">Mark 100%</button></div>` : ""}
             <div class="task-list">${tasks.length ? tasks.map((task) => `<div class="task-row">
               <div class="task-info"><strong>${escapeHtml(task.name)}</strong><span>${escapeHtml(task.responsible_trade)} · Typical ${task.duration_days} ${task.duration_days === 1 ? "day" : "days"}</span></div>
               <input type="range" min="0" max="100" step="5" value="${task.progress_percent}" data-task-id="${task.id}" aria-label="${escapeHtml(task.name)} progress" ${canManage ? "" : "disabled"}>
@@ -160,6 +162,16 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
         if (error) showError("Task progress could not be saved."); else loadProjects();
       });
     });
+    list.querySelectorAll("[data-phase-group]").forEach((details) => {
+      details.addEventListener("toggle", () => { if (details.open) openPhaseIds.add(details.dataset.phaseGroup); else openPhaseIds.delete(details.dataset.phaseGroup); });
+    });
+    list.querySelectorAll("[data-phase-progress]").forEach((input) => {
+      input.addEventListener("input", () => { input.nextElementSibling.textContent = `${input.value}%`; });
+      input.addEventListener("change", () => updateWholePhase(project, input.dataset.phaseProgress, Number(input.value)));
+    });
+    list.querySelectorAll("[data-complete-phase]").forEach((button) => {
+      button.addEventListener("click", () => updateWholePhase(project, button.dataset.completePhase, 100));
+    });
 
     list.querySelectorAll("[data-file-category]").forEach((fileInput) => {
       fileInput.addEventListener("change", () => uploadProjectFiles(project, [...fileInput.files], fileInput.dataset.fileCategory));
@@ -170,6 +182,16 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
     list.querySelectorAll("[data-delete-file]").forEach((button) => {
       button.addEventListener("click", () => deleteProjectFile(files.find(({ id }) => id === button.dataset.deleteFile)));
     });
+  }
+
+  async function updateWholePhase(project, phaseId, progressPercent) {
+    openPhaseIds.add(phaseId);
+    const phase = (project.project_phases || []).find(({ id }) => id === phaseId);
+    const taskIds = (phase?.project_tasks || []).map(({ id }) => id);
+    if (!taskIds.length) return;
+    const { error } = await supabase.from("project_tasks").update({ progress_percent: progressPercent }).in("id", taskIds);
+    if (error) return showError("The phase progress could not be saved.");
+    await loadProjects();
   }
 
   async function uploadProjectFiles(project, files, category) {
@@ -236,13 +258,15 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
     message.hidden = true;
     const name = document.querySelector("#projectName").value.trim();
     const address = addressInput.value.trim();
+    const projectType = document.querySelector("#projectType").value;
     if (!name || !canManage) return;
     const { data: project, error } = await supabase.from("projects").insert({ company_id: companyId, name, address }).select().single();
     if (error) return showError("The project could not be created.");
-    const phases = DEFAULT_PHASES.map((phaseName, index) => ({ project_id: project.id, name: phaseName, sort_order: index + 1, weight: 1 }));
+    const template = getProjectTemplate(projectType);
+    const phases = template.map(({ phase: phaseName }, index) => ({ project_id: project.id, name: phaseName, sort_order: index + 1, weight: 1 }));
     const { data: createdPhases, error: phaseError } = await supabase.from("project_phases").insert(phases).select("id, name");
     if (phaseError) return showError("The project was created, but its phases could not be added.");
-    const { error: taskError } = await supabase.from("project_tasks").insert(buildProjectTasks(createdPhases || []));
+    const { error: taskError } = await supabase.from("project_tasks").insert(buildProjectTasks(createdPhases || [], template));
     if (taskError) return showError("The phases were created, but their detailed tasks could not be added.");
     form.reset();
     loadProjects();

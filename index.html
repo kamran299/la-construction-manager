@@ -140,10 +140,19 @@
         <div class="projects-grid">
           <section class="project-form-card">
             <h2>Create project</h2>
-            <p>Each new project starts with a complete construction phase plan.</p>
+            <p>Choose the job type and the correct phase plan will be created automatically.</p>
             <form id="projectForm">
               <label for="projectName">Project name</label>
               <input id="projectName" name="name" required>
+              <label for="projectType">Job type</label>
+              <select id="projectType" name="projectType" required>
+                <option value="new-construction">New construction</option>
+                <option value="whole-home-remodel">Whole-home remodel</option>
+                <option value="kitchen-remodel">Kitchen remodel</option>
+                <option value="bathroom-remodel">Bathroom remodel</option>
+                <option value="flooring-remodel">Flooring remodel</option>
+                <option value="kitchen-bath-flooring">Kitchen, bathroom &amp; flooring remodel</option>
+              </select>
               <label for="projectAddress">Address</label>
               <input id="projectAddress" name="address" autocomplete="street-address" placeholder="Start typing an address">
               <button id="createProjectButton" class="primary-button" type="submit">Create project</button>

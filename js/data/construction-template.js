@@ -88,11 +88,61 @@ export const CONSTRUCTION_TEMPLATE = [
   ] },
 ];
 
+const REMODEL_CLOSEOUT = { phase: "Closeout", tasks: [
+  ["Final inspection and corrections", "GC / City", 2],
+  ["Final cleaning", "Cleaning Contractor", 1],
+  ["Owner walkthrough and punch list", "GC / Owner", 2],
+  ["Warranties, manuals, and final handover", "GC", 1],
+] };
+
+const REMODEL_PRECONSTRUCTION = { phase: "Planning & Protection", tasks: [
+  ["Existing-condition review and measurements", "GC / Designer", 2],
+  ["Scope, selections, and owner approval", "GC / Owner", 3],
+  ["Permit review and procurement", "GC", 5],
+  ["Dust protection and site setup", "GC", 1],
+] };
+
+const KITCHEN_TASKS = [
+  ["Kitchen demolition and disposal", "Demolition Contractor", 2], ["Framing and substrate repairs", "Framing Contractor", 2],
+  ["Plumbing, electrical, gas, and HVAC rough-in", "MEP Trades", 4], ["Rough inspections", "City / MEP Trades", 1],
+  ["Drywall, patching, and paint preparation", "Drywall / Painting Contractor", 3], ["Cabinet installation", "Cabinet Contractor", 4],
+  ["Countertop template and installation", "Countertop Contractor", 4], ["Backsplash and finish flooring", "Tile / Flooring Contractor", 3],
+  ["Appliances, plumbing, and electrical trim", "MEP / Appliance Trades", 3], ["Painting and finish carpentry", "Painting / Finish Carpenter", 3],
+];
+const BATHROOM_TASKS = [
+  ["Bathroom demolition and disposal", "Demolition Contractor", 2], ["Framing and subfloor repairs", "Framing Contractor", 2],
+  ["Plumbing, electrical, and ventilation rough-in", "MEP Trades", 3], ["Rough inspections", "City / MEP Trades", 1],
+  ["Shower pan, waterproofing, and flood test", "Tile Contractor", 3], ["Drywall and tile substrate", "Drywall / Tile Contractor", 2],
+  ["Tile installation and grout", "Tile Contractor", 5], ["Vanity, countertop, and millwork", "Cabinet / Finish Contractor", 2],
+  ["Plumbing fixtures, lighting, and accessories", "MEP Trades", 2], ["Painting and finish work", "Painting Contractor", 2],
+];
+const FLOORING_TASKS = [
+  ["Existing flooring removal and disposal", "Flooring Contractor", 2], ["Subfloor inspection and repairs", "Flooring / Framing Contractor", 2],
+  ["Moisture testing and floor preparation", "Flooring Contractor", 1], ["Flooring material acclimation", "Flooring Contractor", 2],
+  ["Flooring installation", "Flooring Contractor", 4], ["Baseboards, transitions, and trim", "Finish Carpenter", 2],
+  ["Touch-up painting and final cleaning", "Painting / Cleaning Contractor", 2],
+];
+
+const makeRemodelTemplate = (work) => [REMODEL_PRECONSTRUCTION, { phase: "Remodel Work", tasks: work }, REMODEL_CLOSEOUT];
+export const PROJECT_TEMPLATES = {
+  "new-construction": CONSTRUCTION_TEMPLATE,
+  "whole-home-remodel": [REMODEL_PRECONSTRUCTION,
+    { phase: "Demolition", tasks: [["Selective demolition and disposal", "Demolition Contractor", 5], ["Hazardous-material coordination", "GC / Specialty Contractor", 2], ["Existing-condition repairs", "GC / Framing Contractor", 3]] },
+    { phase: "Framing & Exterior", tasks: [["Structural and framing modifications", "Framing Contractor", 7], ["Windows and exterior doors", "Window Installer", 4], ["Roofing and weatherproofing repairs", "Roofing / Waterproofing Contractor", 4]] },
+    { phase: "MEP Rough-in", tasks: [["Plumbing rough-in", "Plumbing Contractor", 5], ["Electrical and low-voltage rough-in", "Electrical Contractor", 5], ["HVAC rough-in", "HVAC Contractor", 4], ["Rough inspections and corrections", "City / MEP Trades", 2]] },
+    { phase: "Interior Finishes", tasks: [...BATHROOM_TASKS.slice(4), ...KITCHEN_TASKS.slice(5), ...FLOORING_TASKS.slice(2)] }, REMODEL_CLOSEOUT],
+  "kitchen-remodel": makeRemodelTemplate(KITCHEN_TASKS),
+  "bathroom-remodel": makeRemodelTemplate(BATHROOM_TASKS),
+  "flooring-remodel": makeRemodelTemplate(FLOORING_TASKS),
+  "kitchen-bath-flooring": [REMODEL_PRECONSTRUCTION, { phase: "Kitchen", tasks: KITCHEN_TASKS }, { phase: "Bathrooms", tasks: BATHROOM_TASKS }, { phase: "Flooring", tasks: FLOORING_TASKS }, REMODEL_CLOSEOUT],
+};
+
+export function getProjectTemplate(type = "new-construction") { return PROJECT_TEMPLATES[type] || CONSTRUCTION_TEMPLATE; }
 export const DEFAULT_PHASES = CONSTRUCTION_TEMPLATE.map(({ phase }) => phase);
 
-export function buildProjectTasks(phases) {
+export function buildProjectTasks(phases, template = CONSTRUCTION_TEMPLATE) {
   const phaseIds = new Map(phases.map(({ id, name }) => [name, id]));
-  return CONSTRUCTION_TEMPLATE.flatMap(({ phase, tasks }) => tasks.map(([name, responsibleTrade, durationDays], index) => ({
+  return template.flatMap(({ phase, tasks }) => tasks.map(([name, responsibleTrade, durationDays], index) => ({
     phase_id: phaseIds.get(phase),
     name,
     responsible_trade: responsibleTrade,
