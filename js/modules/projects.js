@@ -29,7 +29,7 @@ function renderFileRows(files, canManage) {
   </div>`).join("");
 }
 
-export function createProjectsModule({ supabase, companyId, canManage, onCountChange, onNavigate }) {
+export function createProjectsModule({ supabase, companyId, canManage, canDelete, onCountChange, onNavigate }) {
   const projectsView = document.querySelector("#projectsView");
   const list = document.querySelector("#projectsList");
   const form = document.querySelector("#projectForm");
@@ -128,6 +128,15 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
     const files = project.project_files || [];
     list.innerHTML = `<article class="project-card project-detail-card">
       <div class="project-card-header"><div><h2>Construction plan</h2><div class="project-address">${escapeHtml(project.address || "No address")}</div></div><div class="overall-progress">${project.progress_percent}%</div></div>
+      ${canManage ? `<section class="project-management-panel">
+        <div class="project-management-heading"><div><h2>Project settings</h2><p>Edit the project name or address, or permanently delete this project.</p></div><button class="project-edit-toggle" type="button" data-toggle-project-edit>Edit project</button></div>
+        <form class="project-edit-form" data-project-edit-form hidden>
+          <label>Project name<input name="projectName" value="${escapeHtml(project.name)}" required></label>
+          <label>Address<input name="projectAddress" value="${escapeHtml(project.address || "")}" autocomplete="street-address"></label>
+          <div class="project-edit-actions"><button class="primary-button" type="submit">Save changes</button><button class="secondary-button" type="button" data-cancel-project-edit>Cancel</button></div>
+        </form>
+        ${canDelete ? `<div class="project-danger-zone"><div><strong>Delete project</strong><small>This permanently deletes its phases, tasks, reports connection, and uploaded files.</small></div><button type="button" data-delete-project>Delete project</button></div>` : ""}
+      </section>` : ""}
       <div class="phase-list">${phases.map((phase) => {
         const tasks = [...(phase.project_tasks || [])].sort((a, b) => a.sort_order - b.sort_order);
         return `<details class="phase-group" data-phase-group="${phase.id}" ${openPhaseIds.has(phase.id) ? "open" : ""}>
@@ -182,6 +191,53 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
     list.querySelectorAll("[data-delete-file]").forEach((button) => {
       button.addEventListener("click", () => deleteProjectFile(files.find(({ id }) => id === button.dataset.deleteFile)));
     });
+    const editForm = list.querySelector("[data-project-edit-form]");
+    list.querySelector("[data-toggle-project-edit]")?.addEventListener("click", () => { editForm.hidden = !editForm.hidden; });
+    list.querySelector("[data-cancel-project-edit]")?.addEventListener("click", () => { editForm.hidden = true; });
+    editForm?.addEventListener("submit", (event) => updateProject(event, project));
+    list.querySelector("[data-delete-project]")?.addEventListener("click", () => deleteProject(project));
+  }
+
+  async function updateProject(event, project) {
+    event.preventDefault();
+    message.hidden = true;
+    const submitButton = event.currentTarget.querySelector('[type="submit"]');
+    const name = event.currentTarget.elements.projectName.value.trim();
+    const address = event.currentTarget.elements.projectAddress.value.trim();
+    if (!name) return showError("Project name is required.");
+    submitButton.disabled = true;
+    submitButton.textContent = "Saving...";
+    const { error } = await supabase.from("projects").update({ name, address }).eq("id", project.id);
+    if (error) {
+      submitButton.disabled = false;
+      submitButton.textContent = "Save changes";
+      return showError(`The project could not be updated: ${error.message}`);
+    }
+    await loadProjects();
+  }
+
+  async function deleteProject(project) {
+    if (!canDelete) return showError("Only an Owner / Admin can delete a project.");
+    const confirmation = window.prompt(`This will permanently delete "${project.name}" and all of its information.\n\nType DELETE to confirm:`);
+    if (confirmation !== "DELETE") return;
+    message.hidden = true;
+    const deleteButton = list.querySelector("[data-delete-project]");
+    if (deleteButton) { deleteButton.disabled = true; deleteButton.textContent = "Deleting..."; }
+    const storagePaths = (project.project_files || []).map(({ storage_path: storagePath }) => storagePath).filter(Boolean);
+    if (storagePaths.length) {
+      const { error: storageError } = await supabase.storage.from("project-files").remove(storagePaths);
+      if (storageError) {
+        if (deleteButton) { deleteButton.disabled = false; deleteButton.textContent = "Delete project"; }
+        return showError(`Project files could not be deleted: ${storageError.message}`);
+      }
+    }
+    const { error } = await supabase.from("projects").delete().eq("id", project.id);
+    if (error) {
+      if (deleteButton) { deleteButton.disabled = false; deleteButton.textContent = "Delete project"; }
+      return showError(`The project could not be deleted: ${error.message}`);
+    }
+    selectedProjectId = null;
+    await loadProjects();
   }
 
   async function updateWholePhase(project, phaseId, progressPercent) {

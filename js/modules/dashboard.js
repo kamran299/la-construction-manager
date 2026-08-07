@@ -87,6 +87,7 @@ export async function showDashboard({ supabase, session }) {
     supabase,
     companyId: membership.companies.id,
     canManage: ["owner_admin", "project_manager"].includes(membership.role),
+    canDelete: membership.role === "owner_admin",
     onCountChange: (nextCount) => { document.querySelector("#projectCount").textContent = String(nextCount); },
     onNavigate: navigate,
   });
