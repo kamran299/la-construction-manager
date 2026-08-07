@@ -7,11 +7,25 @@ async function verifyUser(token, supabaseUrl, publicKey) {
   return response.ok ? response.json() : null;
 }
 
+const CONSTRUCTION_GLOSSARY = `
+L&A Custom Homes vocabulary for Persian/English field reports:
+- Poly (پُلی/پلی) is a person's name; always write Poly, never plate compactor.
+- subfloor (ساب فلور/ساب‌فلور) means subfloor; never scaffolding.
+- truckload of concrete (تراک کانکریت), concrete truck (تراک بتن), concrete pump (پمپ بتن), pour/poured concrete (بتن‌ریزی/کانکریت ریختن).
+- excavation (اکسکویشن/خاک‌برداری), grading (گریدینگ), compaction (کامپکشن), plate compactor (پلیت کامپکتور), trench (ترنچ), backfill (بک‌فیل).
+- layout (لی‌اوت), survey (سِروی), footing (فوتینگ), foundation (فاندیشن), formwork/forms (فرم‌ورک/قالب), rebar (ریبار/آرماتور), anchor bolt (انکر بولت), slab (اسلب), stem wall (استم وال), retaining wall (ریتینینگ وال), waterproofing (واترپروفینگ), drainage (درینج).
+- framing (فریمینگ), joist (جویست), beam (بیم), header (هِدِر), shear wall (شیر وال), sheathing (شیتینگ), blocking (بلاکینگ), truss (تراس), roof framing (روف فریمینگ).
+- rough-in (راف‌این), MEP, plumbing (پلامینگ), electrical (الکتریکال), HVAC, ductwork (داکت‌ورک), fire sprinkler (فایر اسپرینکلر), low voltage (لو وُلتج).
+- insulation (اینسولیشن), drywall/sheetrock (درای‌وال/شیت‌راک), taping (تیپینگ), texture (تکسچر), stucco (استاکو), siding (سایدینگ), flashing (فلشینگ), roofing (روفینگ), scaffolding (اسکفولدینگ).
+- window (ویندو), door (دور), cabinet (کابینت), countertop (کانترتاپ), tile (تایل), hardwood (هاردوود), flooring (فلورینگ), baseboard (بیس‌بورد), trim (تریم), painting (پینتینگ), finish carpentry (فینیش کارپنتری).
+- inspection (اینزپکشن), correction notice (کورکشن نوتیس), punch list (پانچ‌لیست), change order (چنج اوردر), RFI, submittal, material delivery (متریال دلیوری), subcontractor/sub (ساب‌کانترکتور/ساب), superintendent (سوپرینتندنت), foreman (فورمن), crew (کرو).
+Preserve all people, company and project names, addresses, dates, times, measurements and quantities exactly. If a word may be a person's name or an unfamiliar construction term, transcribe it phonetically instead of replacing it with unrelated equipment or work.`;
+
 async function transcribe(openaiKey, audio, model) {
   const body = new FormData();
   body.append("file", audio, audio.name || "persian-report.webm");
   body.append("model", model);
-  body.append("prompt", "A Persian or English daily construction field report containing project names, addresses, trade work, materials, safety notes, delays, and next steps. Company vocabulary: Poly (پُلی/پلی) is a person's name and must be written as Poly; subfloor (ساب فلور/ساب‌فلور) is the construction term subfloor and must never be changed to scaffolding; تراک کانکریت means a truckload of concrete. Preserve names, quantities, times, and construction terminology accurately.");
+  body.append("prompt", `A Persian or English daily construction field report containing project names, addresses, trade work, materials, safety notes, delays, and next steps. ${CONSTRUCTION_GLOSSARY}`);
   return fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
     headers: { authorization: `Bearer ${openaiKey}` },

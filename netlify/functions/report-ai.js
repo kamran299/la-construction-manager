@@ -12,6 +12,12 @@ function outputText(data) {
   return (data.output || []).flatMap((item) => item.content || []).filter((item) => item.type === "output_text").map((item) => item.text).join("\n");
 }
 
+const CONSTRUCTION_GLOSSARY = `
+Apply this L&A Custom Homes glossary exactly:
+Poly (پُلی/پلی) is a person's name, never plate compactor. Subfloor (ساب فلور/ساب‌فلور) means subfloor, never scaffolding. تراک کانکریت means a truckload of concrete.
+Standard terms include excavation, grading, compaction, trench, backfill, layout, survey, footing, foundation, formwork/forms, rebar, anchor bolt, slab, stem wall, retaining wall, waterproofing, drainage, concrete pump, framing, joist, beam, header, shear wall, sheathing, blocking, truss, roofing, rough-in, MEP, plumbing, electrical, HVAC, ductwork, fire sprinkler, low voltage, insulation, drywall/sheetrock, taping, texture, stucco, siding, flashing, scaffolding, windows, doors, cabinets, countertops, tile, hardwood, flooring, baseboard, trim, painting, finish carpentry, inspection, correction notice, punch list, change order, RFI, submittal, material delivery, subcontractor/sub, superintendent, foreman and crew.
+Persian speakers frequently pronounce these as English loanwords; translate them to the matching standard English construction term. Preserve all people, company and project names, addresses, dates, times, measurements and quantities exactly. If an unfamiliar word may be a name or specialized term, transliterate it instead of inventing or substituting an unrelated item.`;
+
 export default async (request) => {
   if (request.method !== "POST") return json(405, { error: "Method not allowed" });
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -25,7 +31,7 @@ export default async (request) => {
   const isSummary = body.action === "summarize";
   const instructions = isSummary
     ? "Create a concise professional English end-of-day construction report. Group work by employee, preserve project names, mention blockers, safety issues, decisions, and next actions. Clearly name who submitted each item. Return only the report text."
-    : "Detect whether the construction field report is Persian or English. If Persian, translate it into clear professional English. If already English, preserve its meaning and lightly clean grammar only. Apply this company glossary exactly: Poly (پُلی/پلی) is a person's name, never a plate compactor; subfloor (ساب فلور/ساب‌فلور) means subfloor and must never be changed to scaffolding; تراک کانکریت means a truckload of concrete. Preserve names, quantities, times, and construction terminology, and never invent facts. Return only valid JSON with keys english_text and english_summary. english_summary must be one concise sentence.";
+    : `Detect whether the construction field report is Persian or English. If Persian, translate it into clear professional English. If already English, preserve its meaning and lightly clean grammar only. ${CONSTRUCTION_GLOSSARY} Never invent facts. Return only valid JSON with keys english_text and english_summary. english_summary must be one concise sentence.`;
   const input = isSummary ? JSON.stringify(body.reports || []) : String(body.text || "");
   if (!input.trim()) return json(400, { error: "Report text is required" });
 
