@@ -77,7 +77,7 @@ export default async (request) => {
   if (!body || typeof body !== "object") return json(400, { error: "A valid JSON request is required" });
   const isSummary = body.action === "summarize";
   const instructions = isSummary
-    ? `Create a professional 5 PM English construction management summary from the submitted daily field reports and the prior open action items. ${CONSTRUCTION_GLOSSARY}
+    ? `Create a professional 5 PM English construction management summary from the submitted daily field reports and the open action-item history reconstructed from every earlier daily summary. ${CONSTRUCTION_GLOSSARY}
 Never invent facts, assumptions, safety events, delays, or tomorrow tasks. Preserve exact names, project names, quantities, times, dates, and construction terms. Use normal name capitalization without changing the name. Merge duplicate facts only when they clearly describe the same work. Never combine unrelated tasks, inspections, deliveries, or issues into one item. If reports conflict, keep both facts and identify their reporters.
 Treat every fact as one atomic statement and assign it to only the most appropriate category. For every categorized item, evidence must be a short exact excerpt copied from a submitted report. Never use AI-written wording as evidence.
 Classification rules:
@@ -86,7 +86,7 @@ Classification rules:
 - Inspections contains only an actual inspection, inspector visit, inspection result, correction notice, or explicitly requested inspection. Do not turn a generic check, installation, removal, reinstallation, repair, or Monday work into an inspection.
 - Overdue work requires explicit evidence that work is late, missed, overdue, unfinished past its expected time, or carried over. A general blocker is not automatically overdue.
 - Risks contains only the actual risk, hazard, complaint, or concern. Describe it in natural management English. Never call enforcement, PPE use, a safety meeting, or another corrective action a "safety risk"; include a corrective action only after naming an explicit underlying hazard or noncompliance.
-- Prior open action items are unfinished tasks carried from the most recent earlier summary. Remove one only when today's submitted reports explicitly confirm that same task was completed. List such confirmations in resolved_prior_tasks using the exact carryover_id and an exact completion excerpt from today's report. If it is not mentioned, is ambiguous, remains pending, or is only underway, include it in tomorrow_plan with source "carryover", the same carryover_id, and its original source_date. Never treat silence as completion.
+- Prior open action items are the still-unresolved tasks reconstructed chronologically from all earlier daily summaries, not only the previous day. Remove one only when today's submitted reports explicitly confirm that same task was completed. List such confirmations in resolved_prior_tasks using the exact carryover_id and an exact completion excerpt from today's report. If it is not mentioned, is ambiguous, remains pending, or is only underway, include it in tomorrow_plan with source "carryover", the same carryover_id, and its original source_date. Never treat silence as completion.
 - New explicit next steps from today's reports go in tomorrow_plan with source "today" and source_date set to the submitted report date.
 Return only valid JSON with exactly this structure:
 {

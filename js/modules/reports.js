@@ -227,23 +227,45 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     return data;
   }
 
+  function taskSignature(item) {
+    return `${String(item.project || "General").trim().toLowerCase()}::${String(item.details || "").trim().toLowerCase().replace(/\s+/g, " ")}`;
+  }
+
   async function loadPriorOpenTasks() {
     const { data, error } = await supabase.from("daily_report_summaries")
       .select("report_date,english_summary")
       .eq("company_id", companyId)
       .lt("report_date", filterDate.value)
-      .order("report_date", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error || !data) return [];
-    const previous = parseDailySummary(data.english_summary);
-    return (Array.isArray(previous?.tomorrow_plan) ? previous.tomorrow_plan : []).map((item, index) => ({
-      project: item.project || "General",
-      details: item.details,
-      reported_by: item.reported_by || [],
-      source_date: item.source_date || data.report_date,
-      carryover_id: item.carryover_id || `${data.report_date}:${index}`,
-    })).filter((item) => item.details);
+      .order("report_date", { ascending: true });
+    if (error) throw new Error("Previous open tasks could not be loaded.");
+
+    const openTasks = new Map();
+    const idsBySignature = new Map();
+    (data || []).forEach((row) => {
+      const summary = parseDailySummary(row.english_summary);
+      (Array.isArray(summary?.resolved_prior_tasks) ? summary.resolved_prior_tasks : []).forEach(({ carryover_id: carryoverId }) => {
+        const removed = openTasks.get(carryoverId);
+        if (removed) idsBySignature.delete(taskSignature(removed));
+        openTasks.delete(carryoverId);
+      });
+      (Array.isArray(summary?.tomorrow_plan) ? summary.tomorrow_plan : []).forEach((item, index) => {
+        if (!item?.details) return;
+        const signature = taskSignature(item);
+        const carryoverId = item.carryover_id || idsBySignature.get(signature) || `${row.report_date}:${index}`;
+        const existing = openTasks.get(carryoverId);
+        if (existing) idsBySignature.delete(taskSignature(existing));
+        const task = {
+          project: item.project || "General",
+          details: item.details,
+          reported_by: item.reported_by || existing?.reported_by || [],
+          source_date: existing?.source_date || item.source_date || row.report_date,
+          carryover_id: carryoverId,
+        };
+        openTasks.set(carryoverId, task);
+        idsBySignature.set(signature, carryoverId);
+      });
+    });
+    return [...openTasks.values()];
   }
 
   async function loadProjects() {
