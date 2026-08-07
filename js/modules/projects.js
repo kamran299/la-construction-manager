@@ -7,6 +7,18 @@ function escapeHtml(value) {
   })[character]);
 }
 
+function formatFileSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getFileIcon(file) {
+  if ((file.mime_type || "").startsWith("image/")) return "▧";
+  if (file.mime_type === "application/pdf") return "PDF";
+  return "DOC";
+}
+
 export function createProjectsModule({ supabase, companyId, canManage, onCountChange }) {
   const dashboardContent = document.querySelector("#dashboardView > .dashboard-content");
   const projectsView = document.querySelector("#projectsView");
@@ -45,6 +57,16 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
       .order("created_at", { ascending: false });
     if (error) return showError("Projects could not be loaded.");
     const projects = data || [];
+    if (projects.length) {
+      const { data: files } = await supabase
+        .from("project_files")
+        .select("*")
+        .in("project_id", projects.map(({ id }) => id))
+        .order("created_at", { ascending: false });
+      projects.forEach((project) => {
+        project.project_files = (files || []).filter(({ project_id: projectId }) => projectId === project.id);
+      });
+    }
     if (canManage && !isRepairingTasks) {
       const missingTasks = projects.flatMap((project) => buildProjectTasks(
         (project.project_phases || []).filter((phase) => !(phase.project_tasks || []).length),
@@ -108,6 +130,7 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
     formCard.hidden = true;
     projectsGrid.classList.add("project-detail-mode");
     const phases = [...(project.project_phases || [])].sort((a, b) => a.sort_order - b.sort_order);
+    const files = project.project_files || [];
     list.innerHTML = `<article class="project-card project-detail-card">
       <div class="project-card-header"><div><h2>Construction plan</h2><div class="project-address">${escapeHtml(project.address || "No address")}</div></div><div class="overall-progress">${project.progress_percent}%</div></div>
       <div class="phase-list">${phases.map((phase) => {
@@ -121,6 +144,16 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
             </div>`).join("") : '<p class="no-tasks">Detailed tasks must be added to this phase.</p>'}</div>
           </details>`;
       }).join("")}</div>
+      <section class="project-files-section">
+        <div class="files-heading"><div><h2>Files &amp; Plans</h2><p>Photos, plans, PDFs, and project documents</p></div><strong>${files.length} ${files.length === 1 ? "file" : "files"}</strong></div>
+        ${canManage ? `<label class="file-upload-control"><input id="projectFileInput" type="file" multiple accept="image/*,.pdf,.dwg,.dxf,.doc,.docx,.xls,.xlsx,.csv,.txt"><span>＋ Add files or photos</span><small>Maximum 50 MB per file</small></label><p id="fileUploadStatus" class="file-upload-status" hidden></p>` : ""}
+        <div class="project-files-list">${files.length ? files.map((file) => `<div class="project-file-row">
+          <span class="file-type-icon">${getFileIcon(file)}</span>
+          <span class="file-details"><strong>${escapeHtml(file.file_name)}</strong><small>${formatFileSize(file.file_size)} · ${new Date(file.created_at).toLocaleDateString()}</small></span>
+          <button class="file-action" type="button" data-open-file="${file.id}">Open</button>
+          ${canManage ? `<button class="file-action file-delete" type="button" data-delete-file="${file.id}" aria-label="Delete ${escapeHtml(file.file_name)}">Delete</button>` : ""}
+        </div>`).join("") : '<div class="empty-files">No files have been added to this project yet.</div>'}</div>
+      </section>
     </article>`;
 
     list.querySelectorAll("input[data-task-id]").forEach((input) => {
@@ -130,6 +163,72 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
         if (error) showError("Task progress could not be saved."); else loadProjects();
       });
     });
+
+    const fileInput = document.querySelector("#projectFileInput");
+    if (fileInput) fileInput.addEventListener("change", () => uploadProjectFiles(project, [...fileInput.files]));
+    list.querySelectorAll("[data-open-file]").forEach((button) => {
+      button.addEventListener("click", () => openProjectFile(files.find(({ id }) => id === button.dataset.openFile)));
+    });
+    list.querySelectorAll("[data-delete-file]").forEach((button) => {
+      button.addEventListener("click", () => deleteProjectFile(files.find(({ id }) => id === button.dataset.deleteFile)));
+    });
+  }
+
+  async function uploadProjectFiles(project, files) {
+    if (!files.length) return;
+    const status = document.querySelector("#fileUploadStatus");
+    status.hidden = false;
+    status.classList.remove("is-error");
+    status.textContent = `Uploading ${files.length} ${files.length === 1 ? "file" : "files"}...`;
+    for (const file of files) {
+      if (file.size > 50 * 1024 * 1024) {
+        status.textContent = `${file.name} is larger than 50 MB.`;
+        status.classList.add("is-error");
+        return;
+      }
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, "-");
+      const uniqueId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const storagePath = `${companyId}/${project.id}/${uniqueId}-${safeName}`;
+      const { error: uploadError } = await supabase.storage.from("project-files").upload(storagePath, file, { contentType: file.type || "application/octet-stream" });
+      if (uploadError) {
+        status.textContent = `${file.name} could not be uploaded.`;
+        status.classList.add("is-error");
+        return;
+      }
+      const { error: metadataError } = await supabase.from("project_files").insert({
+        project_id: project.id, storage_path: storagePath, file_name: file.name,
+        mime_type: file.type || null, file_size: file.size,
+      });
+      if (metadataError) {
+        await supabase.storage.from("project-files").remove([storagePath]);
+        status.textContent = `${file.name} could not be connected to the project.`;
+        status.classList.add("is-error");
+        return;
+      }
+    }
+    await loadProjects();
+  }
+
+  async function openProjectFile(file) {
+    if (!file) return;
+    const newTab = window.open("", "_blank");
+    const { data, error } = await supabase.storage.from("project-files").createSignedUrl(file.storage_path, 300);
+    if (error || !data?.signedUrl) {
+      newTab?.close();
+      showError("The file could not be opened.");
+      return;
+    }
+    if (newTab) newTab.location = data.signedUrl;
+    else window.location.href = data.signedUrl;
+  }
+
+  async function deleteProjectFile(file) {
+    if (!file || !window.confirm(`Delete ${file.file_name}?`)) return;
+    const { error: storageError } = await supabase.storage.from("project-files").remove([file.storage_path]);
+    if (storageError) return showError("The stored file could not be deleted.");
+    const { error } = await supabase.from("project_files").delete().eq("id", file.id);
+    if (error) return showError("The file record could not be deleted.");
+    await loadProjects();
   }
 
   function showError(text) { message.textContent = text; message.hidden = false; }
