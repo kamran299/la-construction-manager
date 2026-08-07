@@ -32,16 +32,22 @@ export async function enableAddressAutocomplete(input) {
   if (!googleMapsKey || !input) return false;
 
   const google = await loadMapsScript(googleMapsKey);
-  const autocomplete = new google.maps.places.Autocomplete(input, {
-    componentRestrictions: { country: "us" },
-    fields: ["formatted_address", "address_components", "geometry", "place_id"],
-    types: ["address"],
+  const { PlaceAutocompleteElement } = await google.maps.importLibrary("places");
+  const autocomplete = new PlaceAutocompleteElement();
+  autocomplete.id = "projectAddressAutocomplete";
+  autocomplete.placeholder = "Start typing an address";
+  autocomplete.setAttribute("aria-label", "Address");
+
+  input.insertAdjacentElement("afterend", autocomplete);
+  input.hidden = true;
+  document.querySelector('label[for="projectAddress"]')?.setAttribute("for", autocomplete.id);
+
+  autocomplete.addEventListener("input", () => { input.value = ""; });
+  autocomplete.addEventListener("gmp-select", async ({ placePrediction }) => {
+    const place = placePrediction.toPlace();
+    await place.fetchFields({ fields: ["formattedAddress"] });
+    input.value = place.formattedAddress || "";
   });
 
-  autocomplete.addListener("place_changed", () => {
-    const place = autocomplete.getPlace();
-    if (place.formatted_address) input.value = place.formatted_address;
-  });
-
-  return true;
+  return autocomplete;
 }

@@ -24,7 +24,10 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
     dashboardContent.hidden = showProjects;
     projectsView.hidden = !showProjects;
     navItems.forEach((item) => item.classList.toggle("is-active", item.id === (showProjects ? "projectsNav" : "")));
-    document.querySelector('.nav-item[href="#dashboard"]').classList.toggle("is-active", !showProjects);
+    const dashboardNav = document.querySelector('.nav-item[href="#dashboard"]');
+    dashboardNav.classList.toggle("is-active", !showProjects);
+    dashboardNav.toggleAttribute("aria-current", !showProjects);
+    document.querySelector("#projectsNav").toggleAttribute("aria-current", showProjects);
     if (showProjects) loadProjects();
   }
 
@@ -83,6 +86,7 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
   });
 
   document.querySelector("#projectsNav").addEventListener("click", (event) => { event.preventDefault(); navigate(true); });
+  document.querySelector('.nav-item[href="#dashboard"]').addEventListener("click", (event) => { event.preventDefault(); navigate(false); });
   document.querySelector("#backToDashboard").addEventListener("click", () => navigate(false));
   if (!canManage) document.querySelector(".project-form-card").hidden = true;
   else enableAddressAutocomplete(addressInput).catch(() => {
