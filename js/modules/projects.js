@@ -19,6 +19,16 @@ function getFileIcon(file) {
   return "DOC";
 }
 
+function renderFileRows(files, canManage) {
+  if (!files.length) return '<div class="empty-files">Nothing has been added here yet.</div>';
+  return files.map((file) => `<div class="project-file-row">
+    <span class="file-type-icon">${getFileIcon(file)}</span>
+    <span class="file-details"><strong>${escapeHtml(file.file_name)}</strong><small>${formatFileSize(file.file_size)} · ${new Date(file.created_at).toLocaleDateString()}</small></span>
+    <button class="file-action" type="button" data-open-file="${file.id}">Open</button>
+    ${canManage ? `<button class="file-action file-delete" type="button" data-delete-file="${file.id}" aria-label="Delete ${escapeHtml(file.file_name)}">Delete</button>` : ""}
+  </div>`).join("");
+}
+
 export function createProjectsModule({ supabase, companyId, canManage, onCountChange }) {
   const dashboardContent = document.querySelector("#dashboardView > .dashboard-content");
   const projectsView = document.querySelector("#projectsView");
@@ -146,13 +156,16 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
       }).join("")}</div>
       <section class="project-files-section">
         <div class="files-heading"><div><h2>Files &amp; Plans</h2><p>Photos, plans, PDFs, and project documents</p></div><strong>${files.length} ${files.length === 1 ? "file" : "files"}</strong></div>
-        ${canManage ? `<label class="file-upload-control"><input id="projectFileInput" type="file" multiple accept="image/*,.pdf,.dwg,.dxf,.doc,.docx,.xls,.xlsx,.csv,.txt"><span>＋ Add files or photos</span><small>Maximum 50 MB per file</small></label><p id="fileUploadStatus" class="file-upload-status" hidden></p>` : ""}
-        <div class="project-files-list">${files.length ? files.map((file) => `<div class="project-file-row">
-          <span class="file-type-icon">${getFileIcon(file)}</span>
-          <span class="file-details"><strong>${escapeHtml(file.file_name)}</strong><small>${formatFileSize(file.file_size)} · ${new Date(file.created_at).toLocaleDateString()}</small></span>
-          <button class="file-action" type="button" data-open-file="${file.id}">Open</button>
-          ${canManage ? `<button class="file-action file-delete" type="button" data-delete-file="${file.id}" aria-label="Delete ${escapeHtml(file.file_name)}">Delete</button>` : ""}
-        </div>`).join("") : '<div class="empty-files">No files have been added to this project yet.</div>'}</div>
+        ${canManage ? `<div class="file-upload-grid">
+          <label class="file-upload-control"><input type="file" multiple accept="image/*" data-file-category="photos"><span>＋ Add photos</span><small>Camera or photo library</small></label>
+          <label class="file-upload-control"><input type="file" multiple accept="image/*,.pdf,.dwg,.dxf" data-file-category="plans"><span>＋ Add plans</span><small>PDF, DWG, DXF, or image</small></label>
+          <label class="file-upload-control"><input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" data-file-category="documents"><span>＋ Add documents</span><small>PDF, Word, Excel, or text</small></label>
+        </div><p id="fileUploadStatus" class="file-upload-status" hidden></p>` : ""}
+        <div class="file-category-groups">
+          <section class="file-category"><h3>Photos</h3><div class="project-files-list">${renderFileRows(files.filter(({ category }) => category === "photos"), canManage)}</div></section>
+          <section class="file-category"><h3>Plans</h3><div class="project-files-list">${renderFileRows(files.filter(({ category }) => category === "plans"), canManage)}</div></section>
+          <section class="file-category"><h3>Documents</h3><div class="project-files-list">${renderFileRows(files.filter(({ category }) => !["photos", "plans"].includes(category)), canManage)}</div></section>
+        </div>
       </section>
     </article>`;
 
@@ -164,8 +177,9 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
       });
     });
 
-    const fileInput = document.querySelector("#projectFileInput");
-    if (fileInput) fileInput.addEventListener("change", () => uploadProjectFiles(project, [...fileInput.files]));
+    list.querySelectorAll("[data-file-category]").forEach((fileInput) => {
+      fileInput.addEventListener("change", () => uploadProjectFiles(project, [...fileInput.files], fileInput.dataset.fileCategory));
+    });
     list.querySelectorAll("[data-open-file]").forEach((button) => {
       button.addEventListener("click", () => openProjectFile(files.find(({ id }) => id === button.dataset.openFile)));
     });
@@ -174,7 +188,7 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
     });
   }
 
-  async function uploadProjectFiles(project, files) {
+  async function uploadProjectFiles(project, files, category) {
     if (!files.length) return;
     const status = document.querySelector("#fileUploadStatus");
     status.hidden = false;
@@ -191,17 +205,17 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
       const storagePath = `${companyId}/${project.id}/${uniqueId}-${safeName}`;
       const { error: uploadError } = await supabase.storage.from("project-files").upload(storagePath, file, { contentType: file.type || "application/octet-stream" });
       if (uploadError) {
-        status.textContent = `${file.name} could not be uploaded.`;
+        status.textContent = `${file.name} could not be uploaded: ${uploadError.message}`;
         status.classList.add("is-error");
         return;
       }
       const { error: metadataError } = await supabase.from("project_files").insert({
         project_id: project.id, storage_path: storagePath, file_name: file.name,
-        mime_type: file.type || null, file_size: file.size,
+        mime_type: file.type || null, file_size: file.size, category,
       });
       if (metadataError) {
         await supabase.storage.from("project-files").remove([storagePath]);
-        status.textContent = `${file.name} could not be connected to the project.`;
+        status.textContent = `${file.name} could not be connected to the project: ${metadataError.message}`;
         status.classList.add("is-error");
         return;
       }
