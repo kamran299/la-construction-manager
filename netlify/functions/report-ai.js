@@ -39,11 +39,11 @@ export default async (request) => {
     ? `Create a professional 5 PM English construction management summary from the submitted daily field reports. ${CONSTRUCTION_GLOSSARY}
 Never invent facts, assumptions, safety events, delays, or tomorrow tasks. Preserve exact names, project names, quantities, times, dates, and construction terms. Use normal name capitalization without changing the name. Merge duplicate facts only when they clearly describe the same work. Never combine unrelated tasks, inspections, deliveries, or issues into one item. If reports conflict, keep both facts and identify their reporters.
 Classification rules:
-- Completed work must be explicitly finished, completed, passed, delivered, or performed. Work that only started, is underway, is scheduled, or remains pending is not completed.
+- Completed work must be explicitly finished, completed, passed, delivered, or performed. Work that only started, began, is underway, is scheduled, or remains pending is not completed. Every completed_work details string may contain only completed facts; remove started or pending clauses even when they appear beside completed work in the same source sentence.
 - Materials needed contains only materials explicitly needed, missing, ordered but not received, or awaiting delivery. A delivered material is not "needed" unless the report explicitly says more is required.
-- Inspections contains only an actual inspection, inspection result, correction notice, or explicitly requested inspection. Ordinary installation, removal, reinstallation, or Monday work is not an inspection.
+- Inspections contains only an actual inspection, inspector visit, inspection result, correction notice, or explicitly requested inspection. Do not turn a generic check, installation, removal, reinstallation, repair, or Monday work into an inspection.
 - Overdue work requires explicit evidence that work is late, missed, overdue, unfinished past its expected time, or carried over. A general blocker is not automatically overdue.
-- Risks contains only the actual risk or concern. Put a safety meeting or corrective action in the details only when it directly addresses that same risk.
+- Risks contains only the actual risk, hazard, complaint, or concern. Describe it in natural management English. Never call enforcement, PPE use, a safety meeting, or another corrective action a "safety risk"; include a corrective action only after naming an explicit underlying hazard or noncompliance.
 Return only valid JSON with exactly this structure:
 {
   "executive_summary": "A concise overall conclusion for the day.",
@@ -59,7 +59,7 @@ Return only valid JSON with exactly this structure:
 }
 Use empty arrays when a category was not mentioned. Every material item must identify who reported it.`
     : `Detect whether the construction field report is Persian or English. If Persian, translate it into clear professional English. If already English, preserve its meaning and lightly clean grammar only. ${CONSTRUCTION_GLOSSARY}
-Never invent, infer, or fill in missing facts. A task that only started, is underway, scheduled, or pending is not completed. A delivered material is not a material need unless more is explicitly required. Only place actual inspections, inspection results, correction notices, or requested inspections under inspection. Keep unrelated facts as separate items. Return only valid JSON with exactly this structure:
+Never invent, infer, or fill in missing facts. A task that only started, began, is underway, scheduled, or pending is not completed. Each completed item may contain only completed facts; separate or omit any started or pending clause beside it. A delivered material is not a material need unless more is explicitly required. Only place actual inspections, inspector visits, inspection results, correction notices, or requested inspections under inspection; never turn a generic check or repair into an inspection. Keep unrelated facts as separate items. Describe risks as the underlying hazard or concern, never as PPE enforcement or another corrective action. Return only valid JSON with exactly this structure:
 {
   "english_text": "Faithful cleaned English version of the complete report",
   "english_summary": "One concise sentence describing the report",
