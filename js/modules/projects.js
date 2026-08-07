@@ -19,6 +19,21 @@ function getFileIcon(file) {
   return "DOC";
 }
 
+const PROJECT_TYPE_OPTIONS = [
+  ["new-construction", "New construction"],
+  ["whole-home-remodel", "Whole-home remodel"],
+  ["kitchen-remodel", "Kitchen remodel"],
+  ["bathroom-remodel", "Bathroom remodel"],
+  ["flooring-remodel", "Flooring remodel"],
+  ["kitchen-bath-flooring", "Kitchen, bathroom & flooring remodel"],
+];
+
+function renderProjectTypeOptions(selectedType) {
+  return PROJECT_TYPE_OPTIONS.map(([value, label]) =>
+    `<option value="${value}" ${value === selectedType ? "selected" : ""}>${label}</option>`
+  ).join("");
+}
+
 function renderFileRows(files, canManage) {
   if (!files.length) return '<div class="empty-files">Nothing has been added here yet.</div>';
   return files.map((file) => `<div class="project-file-row">
@@ -65,6 +80,7 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
     if (canManage && !isRepairingTasks) {
       const missingTasks = projects.flatMap((project) => buildProjectTasks(
         (project.project_phases || []).filter((phase) => !(phase.project_tasks || []).length),
+        getProjectTemplate(project.project_type || "new-construction"),
       ));
       if (missingTasks.length) {
         isRepairingTasks = true;
@@ -129,9 +145,10 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
     list.innerHTML = `<article class="project-card project-detail-card">
       <div class="project-card-header"><div><h2>Construction plan</h2><div class="project-address">${escapeHtml(project.address || "No address")}</div></div><div class="overall-progress">${project.progress_percent}%</div></div>
       ${canManage ? `<section class="project-management-panel">
-        <div class="project-management-heading"><div><h2>Project settings</h2><p>Edit the project name or address, or permanently delete this project.</p></div><button class="project-edit-toggle" type="button" data-toggle-project-edit>Edit project</button></div>
+        <div class="project-management-heading"><div><h2>Project settings</h2><p>Edit the project name, job type, or address—or permanently delete this project.</p></div><button class="project-edit-toggle" type="button" data-toggle-project-edit>Edit project</button></div>
         <form class="project-edit-form" data-project-edit-form hidden>
           <label>Project name<input name="projectName" value="${escapeHtml(project.name)}" required></label>
+          <label>Job type<select name="projectType" required>${renderProjectTypeOptions(project.project_type || "new-construction")}</select></label>
           <label>Address<input name="projectAddress" value="${escapeHtml(project.address || "")}" autocomplete="street-address"></label>
           <div class="project-edit-actions"><button class="primary-button" type="submit">Save changes</button><button class="secondary-button" type="button" data-cancel-project-edit>Cancel</button></div>
         </form>
@@ -204,14 +221,28 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
     const submitButton = event.currentTarget.querySelector('[type="submit"]');
     const name = event.currentTarget.elements.projectName.value.trim();
     const address = event.currentTarget.elements.projectAddress.value.trim();
+    const projectType = event.currentTarget.elements.projectType.value;
+    const previousType = project.project_type || "new-construction";
     if (!name) return showError("Project name is required.");
+    if (projectType !== previousType && !window.confirm("Changing the job type will replace the current phases and tasks with the new job plan. Existing phase progress will be reset. Continue?")) return;
     submitButton.disabled = true;
     submitButton.textContent = "Saving...";
-    const { error } = await supabase.from("projects").update({ name, address }).eq("id", project.id);
+    const { error } = await supabase.from("projects").update({ name, address, project_type: projectType }).eq("id", project.id);
     if (error) {
       submitButton.disabled = false;
       submitButton.textContent = "Save changes";
       return showError(`The project could not be updated: ${error.message}`);
+    }
+    if (projectType !== previousType) {
+      const { error: deleteError } = await supabase.from("project_phases").delete().eq("project_id", project.id);
+      if (deleteError) return showError(`The project was updated, but its old plan could not be replaced: ${deleteError.message}`);
+      const template = getProjectTemplate(projectType);
+      const phases = template.map(({ phase: phaseName }, index) => ({ project_id: project.id, name: phaseName, sort_order: index + 1, weight: 1 }));
+      const { data: createdPhases, error: phaseError } = await supabase.from("project_phases").insert(phases).select("id, name");
+      if (phaseError) return showError(`The job type changed, but its new phases could not be added: ${phaseError.message}`);
+      const { error: taskError } = await supabase.from("project_tasks").insert(buildProjectTasks(createdPhases || [], template));
+      if (taskError) return showError(`The new phases were added, but their tasks could not be added: ${taskError.message}`);
+      openPhaseIds.clear();
     }
     await loadProjects();
   }
@@ -316,7 +347,7 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
     const address = addressInput.value.trim();
     const projectType = document.querySelector("#projectType").value;
     if (!name || !canManage) return;
-    const { data: project, error } = await supabase.from("projects").insert({ company_id: companyId, name, address }).select().single();
+    const { data: project, error } = await supabase.from("projects").insert({ company_id: companyId, name, address, project_type: projectType }).select().single();
     if (error) return showError("The project could not be created.");
     const template = getProjectTemplate(projectType);
     const phases = template.map(({ phase: phaseName }, index) => ({ project_id: project.id, name: phaseName, sort_order: index + 1, weight: 1 }));
