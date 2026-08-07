@@ -19,6 +19,7 @@ function parseModelJson(text) {
 
 const INCOMPLETE_WORK = /\b(start(?:ed|ing)?|began|beginning|underway|in progress|scheduled|planned|pending|will|to be)\b/i;
 const COMPLETION_EVIDENCE = /\b(completed?|finished|done|resolved|installed|delivered|passed|repaired|corrected|closed)\b/i;
+const MATERIAL_ACTION = /\b(order(?:ed|ing)?|buy|purchase(?:d|ing)?|procure(?:d|ment|ing)?|source|material(?:s)?\s+(?:needed|required|missing|insufficient))\b/i;
 
 function completedClauses(value) {
   return String(value || "")
@@ -55,7 +56,18 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
     source_date: task.source_date || null,
     carryover_id: task.carryover_id,
   }));
-  return { ...summary, completed_work: completedWork, inspections, tomorrow_plan: [...tomorrowPlan, ...requiredCarryovers] };
+  const finalTomorrowPlan = [...tomorrowPlan, ...requiredCarryovers];
+  const materialsNeeded = Array.isArray(summary.materials_needed) ? [...summary.materials_needed] : [];
+  const materialCarryoverIds = new Set(materialsNeeded.map((item) => item?.carryover_id).filter(Boolean));
+  const materialSignatures = new Set(materialsNeeded.map((item) => `${String(item?.project || "General").toLowerCase()}::${String(item?.details || "").toLowerCase()}`));
+  finalTomorrowPlan.filter((item) => MATERIAL_ACTION.test(String(item?.details || ""))).forEach((item) => {
+    const signature = `${String(item.project || "General").toLowerCase()}::${String(item.details || "").toLowerCase()}`;
+    if ((item.carryover_id && materialCarryoverIds.has(item.carryover_id)) || materialSignatures.has(signature)) return;
+    materialsNeeded.push({ ...item, evidence: item.evidence || item.details });
+    if (item.carryover_id) materialCarryoverIds.add(item.carryover_id);
+    materialSignatures.add(signature);
+  });
+  return { ...summary, completed_work: completedWork, inspections, tomorrow_plan: finalTomorrowPlan, materials_needed: materialsNeeded };
 }
 
 const CONSTRUCTION_GLOSSARY = `
@@ -79,10 +91,10 @@ export default async (request) => {
   const instructions = isSummary
     ? `Create a professional 5 PM English construction management summary from the submitted daily field reports and the open action-item history reconstructed from every earlier daily summary. ${CONSTRUCTION_GLOSSARY}
 Never invent facts, assumptions, safety events, delays, or tomorrow tasks. Preserve exact names, project names, quantities, times, dates, and construction terms. Use normal name capitalization without changing the name. Merge duplicate facts only when they clearly describe the same work. Never combine unrelated tasks, inspections, deliveries, or issues into one item. If reports conflict, keep both facts and identify their reporters.
-Treat every fact as one atomic statement and assign it to only the most appropriate category. For every categorized item, evidence must be a short exact excerpt copied from a submitted report. Never use AI-written wording as evidence.
+Treat every fact as one atomic statement. Categories are not mutually exclusive: the same supported fact must appear in every category it affects. For example, "order soft filler" is both a tomorrow/open task and a material need; a broken planer causing idle labor is both a labor fact and a blocker. For every categorized item, evidence must be a short exact excerpt copied from a submitted report. Never use AI-written wording as evidence.
 Classification rules:
 - Completed work must be explicitly finished, completed, passed, delivered, or performed. Work that only started, began, is underway, is scheduled, or remains pending is not completed. Every completed_work details string may contain only completed facts; remove started or pending clauses even when they appear beside completed work in the same source sentence.
-- Materials needed contains only materials explicitly needed, missing, ordered but not received, or awaiting delivery. A delivered material is not "needed" unless the report explicitly says more is required.
+- Materials needed contains materials explicitly needed, missing, ordered but not received, awaiting delivery, or that must be ordered, bought, purchased, procured, or sourced. Every open task to order or purchase a material must also appear in materials_needed. Preserve the exact material name from the report or carryover task. A delivered material is not "needed" unless the report explicitly says more is required.
 - Inspections contains only an actual inspection, inspector visit, inspection result, correction notice, or explicitly requested inspection. Do not turn a generic check, installation, removal, reinstallation, repair, or Monday work into an inspection.
 - Overdue work requires explicit evidence that work is late, missed, overdue, unfinished past its expected time, or carried over. A general blocker is not automatically overdue.
 - Risks contains only the actual risk, hazard, complaint, or concern. Describe it in natural management English. Never call enforcement, PPE use, a safety meeting, or another corrective action a "safety risk"; include a corrective action only after naming an explicit underlying hazard or noncompliance.
