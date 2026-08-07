@@ -77,7 +77,14 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
       list.innerHTML = '<div class="empty-projects">No projects yet. Create the first project to add its construction phases.</div>';
       return;
     }
-    list.innerHTML = projects.map((project) => {
+    const sortedProjects = [...projects].sort((a, b) => {
+      const addressA = (a.address || "").trim();
+      const addressB = (b.address || "").trim();
+      if (!addressA && addressB) return 1;
+      if (addressA && !addressB) return -1;
+      return addressA.localeCompare(addressB, "en", { numeric: true, sensitivity: "base" });
+    });
+    list.innerHTML = sortedProjects.map((project) => {
       const phases = [...(project.project_phases || [])].sort((a, b) => a.sort_order - b.sort_order);
       return `<button class="project-summary-card" type="button" data-project-id="${project.id}">
         <span class="project-card-header"><span><strong>${escapeHtml(project.name)}</strong><small>${escapeHtml(project.address || "No address")}</small></span><b>${project.progress_percent}%</b></span>
@@ -89,7 +96,7 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
     list.querySelectorAll("[data-project-id]").forEach((button) => {
       button.addEventListener("click", () => {
         selectedProjectId = button.dataset.projectId;
-        renderProject(projects.find(({ id }) => id === selectedProjectId));
+        renderProject(sortedProjects.find(({ id }) => id === selectedProjectId));
       });
     });
   }

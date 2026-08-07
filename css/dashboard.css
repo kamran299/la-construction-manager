@@ -41,20 +41,20 @@
 .project-form-card input { width: 100%; height: 46px; padding: 0 13px; border: 1px solid var(--slate-300); border-radius: 9px; }
 .project-form-card gmp-place-autocomplete { display: block; width: 100%; min-height: 46px; }
 .project-form-card .primary-button { margin-top: 20px; }
-.projects-list { display: grid; gap: 16px; }
-.project-summary-card { display: grid; width: 100%; gap: 18px; padding: 22px; border: 1px solid #e4e7ec; border-radius: 16px; color: inherit; background: var(--white); text-align: left; cursor: pointer; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.projects-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.project-summary-card { display: grid; width: 100%; min-width: 0; gap: 13px; padding: 18px; border: 1px solid #e4e7ec; border-radius: 16px; color: inherit; background: var(--white); text-align: left; cursor: pointer; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
 .project-summary-card:hover { transform: translateY(-2px); border-color: #f4a261; box-shadow: var(--shadow); }
 .project-summary-card .project-card-header strong, .project-summary-card .project-card-header small { display: block; }
 .project-summary-card .project-card-header strong { margin-bottom: 5px; font-size: 1.1rem; }
 .project-summary-card .project-card-header small { color: var(--slate-500); font-size: .8rem; }
 .project-summary-card .project-card-header b { color: var(--orange-600); font-size: 1.35rem; }
-.project-phase-preview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.project-phase-preview { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; }
 .project-phase-preview > span { display: grid; gap: 5px; }
 .project-phase-preview small { overflow: hidden; color: var(--slate-500); font-size: .66rem; text-overflow: ellipsis; white-space: nowrap; }
 .project-phase-preview i { height: 6px; border-radius: 99px; background: linear-gradient(to right, var(--orange-600) var(--progress), #e5e7eb var(--progress)); }
 .open-project-label { color: var(--orange-600); font-size: .8rem; font-weight: 800; }
 .project-detail-mode { display: block; }
-.project-detail-mode .projects-list { max-width: 1040px; }
+.project-detail-mode .projects-list { display: block; max-width: 1040px; }
 .project-detail-card { padding: clamp(20px, 3vw, 32px); }
 .project-card-header { display: flex; justify-content: space-between; gap: 20px; }
 .project-card h2 { margin: 0 0 5px; font-size: 1.15rem; }
@@ -77,5 +77,6 @@
 .no-tasks { margin: 0; padding: 16px; color: var(--slate-500); font-size: .78rem; }
 .empty-projects { padding: 48px 24px; border: 1px dashed var(--slate-300); border-radius: 16px; color: var(--slate-500); text-align: center; }
 @media (max-width: 900px) { .sidebar { position: static; width: 100%; height: auto; flex-direction: row; align-items: center; padding: 14px 20px; } .sidebar-brand { padding: 0; } .sidebar-brand > div:last-child, .sidebar-account, .sidebar nav { display: none; } .dashboard-content { margin-left: 0; padding: 28px 20px; } }
+@media (max-width: 1100px) { .projects-list { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .projects-grid { grid-template-columns: 1fr; } .project-form-card { position: static; } }
 @media (max-width: 680px) { .dashboard-header { align-items: flex-start; } .metric-grid { grid-template-columns: 1fr; } .welcome-card { flex-direction: column; } .metric-card { min-height: 140px; } .project-phase-preview { grid-template-columns: repeat(2, minmax(0, 1fr)); } .phase-summary-progress { grid-template-columns: 70px 40px; } .task-row { grid-template-columns: 1fr 44px; } .task-row input { grid-column: 1 / -1; grid-row: 2; } }
