@@ -16,6 +16,22 @@ function displayPersonName(value) {
   return name.toLowerCase().replace(/(^|[\s'-])([a-z])/g, (_, prefix, letter) => `${prefix}${letter.toUpperCase()}`);
 }
 
+function materialDisplayKey(item) {
+  const ignored = new Set(["a", "an", "the", "to", "be", "is", "are", "was", "were", "must", "should", "for", "material", "materials", "need", "needed", "needs", "require", "required", "missing", "insufficient", "order", "ordered", "ordering", "buy", "purchase", "purchased", "purchasing", "procure", "procured", "procurement", "procuring", "source"]);
+  const words = String(item?.details || "").toLowerCase().match(/[a-z0-9]+/g)?.filter((word) => !ignored.has(word)).sort().join(" ") || "";
+  return `${String(item?.project || "General").toLowerCase()}::${words}`;
+}
+
+function dedupeMaterialsForDisplay(items) {
+  const unique = new Map();
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const key = materialDisplayKey(item);
+    const existing = unique.get(key);
+    unique.set(key, existing ? { ...existing, ...item, source: item.source || existing.source, source_date: item.source_date || existing.source_date, carryover_id: item.carryover_id || existing.carryover_id } : item);
+  });
+  return [...unique.values()];
+}
+
 function renderReportItems(title, items) {
   const rows = Array.isArray(items) ? items.filter(Boolean) : [];
   if (!rows.length) return "";
@@ -41,8 +57,9 @@ function renderAnalysisItems(title, items, emptyText) {
 }
 
 function renderDailySummary(value) {
-  const analysis = parseDailySummary(value);
-  if (!analysis) return `<h2>End-of-day summary</h2><p>${escapeHtml(value)}</p>`;
+  const parsedAnalysis = parseDailySummary(value);
+  if (!parsedAnalysis) return `<h2>End-of-day summary</h2><p>${escapeHtml(value)}</p>`;
+  const analysis = { ...parsedAnalysis, materials_needed: dedupeMaterialsForDisplay(parsedAnalysis.materials_needed) };
   const contributors = Array.isArray(analysis.contributors) ? analysis.contributors : [];
   return `<header class="analysis-header"><div><span>AI DAILY ANALYSIS</span><h2>End-of-day management report</h2></div><strong>${contributors.length} contributor${contributors.length === 1 ? "" : "s"}</strong></header>
     <section class="analysis-overview"><h3>Executive summary</h3><p>${escapeHtml(analysis.executive_summary || "No overall conclusion was available.")}</p></section>
