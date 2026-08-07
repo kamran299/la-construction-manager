@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/login.css">
     <link rel="stylesheet" href="/css/dashboard.css">
-    <script type="module" src="/js/app.js?v=20260806-3"></script>
+    <script type="module" src="/js/app.js?v=20260806-4"></script>
   </head>
   <body>
     <main id="loginView" class="login-layout">
@@ -166,6 +166,10 @@
               <label for="reportDate">Work date</label><input id="reportDate" type="date" required>
               <label for="reportProject">Project</label><select id="reportProject"><option value="">General / no project</option></select>
               <label for="reportText">گزارش فارسی</label><textarea id="reportText" dir="rtl" lang="fa" rows="8" placeholder="امروز چه کارهایی انجام شد؟ مشکل یا تأخیری وجود داشت؟" required></textarea>
+              <div class="voice-report-controls">
+                <button id="recordReportButton" class="voice-report-button" type="button"><span aria-hidden="true">🎙</span> Start voice report</button>
+                <p id="recordingStatus" class="recording-status" role="status">Speak in Persian. Your words will appear above.</p>
+              </div>
               <button id="submitReportButton" class="primary-button" type="submit">Translate &amp; save report</button>
             </form>
           </section>

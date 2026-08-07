@@ -10,10 +10,95 @@ export function createReportsModule({ supabase, session, companyId, membership, 
   const projectSelect = document.querySelector("#reportProject");
   const summary = document.querySelector("#dailySummary");
   const summaryButton = document.querySelector("#summarizeReportsButton");
+  const reportText = document.querySelector("#reportText");
+  const recordButton = document.querySelector("#recordReportButton");
+  const recordingStatus = document.querySelector("#recordingStatus");
   reportDate.value = filterDate.value = today();
   summaryButton.hidden = !canManage;
   let projects = [];
   let reports = [];
+  let recorder = null;
+  let microphoneStream = null;
+  let audioChunks = [];
+
+  function setRecordingStatus(text, state = "") {
+    recordingStatus.textContent = text;
+    recordingStatus.dataset.state = state;
+  }
+
+  function stopMicrophone() {
+    microphoneStream?.getTracks().forEach((track) => track.stop());
+    microphoneStream = null;
+  }
+
+  function supportedAudioType() {
+    const types = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"];
+    return types.find((type) => MediaRecorder.isTypeSupported?.(type)) || "";
+  }
+
+  async function transcribeRecording(blob) {
+    if (!blob.size) throw new Error("No voice was recorded. Please try again.");
+    if (blob.size > 4 * 1024 * 1024) throw new Error("The recording is too long. Please record a shorter report.");
+    const formData = new FormData();
+    const extension = blob.type.includes("mp4") ? "m4a" : "webm";
+    formData.append("audio", blob, `persian-report.${extension}`);
+    const response = await fetch("/.netlify/functions/report-transcribe", {
+      method: "POST",
+      headers: { authorization: `Bearer ${session.access_token}` },
+      body: formData,
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "The voice report could not be converted to text.");
+    const spokenText = String(data.text || "").trim();
+    if (!spokenText) throw new Error("No speech was detected. Please try again.");
+    reportText.value = [reportText.value.trim(), spokenText].filter(Boolean).join("\n");
+    reportText.focus();
+  }
+
+  async function startRecording() {
+    try {
+      microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunks = [];
+      const mimeType = supportedAudioType();
+      recorder = new MediaRecorder(microphoneStream, mimeType ? { mimeType } : undefined);
+      recorder.addEventListener("dataavailable", (event) => { if (event.data.size) audioChunks.push(event.data); });
+      recorder.addEventListener("stop", async () => {
+        const audioType = recorder.mimeType || mimeType || "audio/webm";
+        stopMicrophone();
+        recordButton.disabled = true;
+        recordButton.classList.remove("is-recording");
+        recordButton.innerHTML = '<span aria-hidden="true">🎙</span> Start voice report';
+        setRecordingStatus("Converting your Persian voice to text...", "working");
+        try {
+          await transcribeRecording(new Blob(audioChunks, { type: audioType }));
+          setRecordingStatus("Voice converted to text. Review it above, then save the report.", "success");
+        } catch (error) {
+          setRecordingStatus(error.message || "The recording could not be transcribed.", "error");
+        } finally {
+          recordButton.disabled = false;
+          recorder = null;
+          audioChunks = [];
+        }
+      }, { once: true });
+      recorder.start(1000);
+      recordButton.classList.add("is-recording");
+      recordButton.innerHTML = '<span aria-hidden="true">■</span> Stop recording';
+      setRecordingStatus("Recording now — speak in Persian, then tap Stop.", "recording");
+    } catch (error) {
+      stopMicrophone();
+      setRecordingStatus(error.name === "NotAllowedError" ? "Microphone permission was not allowed. Please allow it and try again." : "The microphone could not be started.", "error");
+    }
+  }
+
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+    recordButton.disabled = true;
+    setRecordingStatus("Voice recording is not supported in this browser. You can still type the report.", "error");
+  } else {
+    recordButton.addEventListener("click", () => {
+      if (recorder?.state === "recording") recorder.stop();
+      else startRecording();
+    });
+  }
 
   async function callAi(payload) {
     const response = await fetch("/.netlify/functions/report-ai", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` }, body: JSON.stringify(payload) });
@@ -45,7 +130,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const button = document.querySelector("#submitReportButton");
-    const text = document.querySelector("#reportText").value.trim();
+    const text = reportText.value.trim();
     if (!text) return;
     button.disabled = true; button.textContent = "Translating & saving...";
     try {
@@ -53,7 +138,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
       const name = membership.full_name || session.user.user_metadata?.full_name || session.user.email.split("@")[0];
       const { error } = await supabase.from("daily_reports").insert({ company_id: companyId, project_id: projectSelect.value || null, reporter_id: session.user.id, reporter_name: name, reporter_email: membership.email || session.user.email, report_date: reportDate.value, original_text: text, english_text: translated.english_text, english_summary: translated.english_summary });
       if (error) throw error;
-      document.querySelector("#reportText").value = ""; filterDate.value = reportDate.value; await loadReports();
+      reportText.value = ""; filterDate.value = reportDate.value; await loadReports();
     } catch (error) { message.textContent = error.message || "The report could not be saved."; message.classList.add("message-error"); message.hidden = false; }
     finally { button.disabled = false; button.textContent = "Translate & save report"; }
   });
