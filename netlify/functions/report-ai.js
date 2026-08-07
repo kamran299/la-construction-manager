@@ -30,7 +30,18 @@ export default async (request) => {
   const body = await request.json();
   const isSummary = body.action === "summarize";
   const instructions = isSummary
-    ? "Create a concise professional English end-of-day construction report. Group work by employee, preserve project names, mention blockers, safety issues, decisions, and next actions. Clearly name who submitted each item. Return only the report text."
+    ? `Create a professional English daily construction management analysis from the submitted field reports. ${CONSTRUCTION_GLOSSARY}
+Never invent facts, assumptions, safety events, delays, or tomorrow tasks. Preserve exact names, project names, quantities, times, dates, and construction terms. Merge duplicate facts only when they clearly describe the same work. If reports conflict, keep both facts and identify their reporters.
+Return only valid JSON with exactly this structure:
+{
+  "executive_summary": "A concise overall conclusion for the day.",
+  "completed_work": [{"project":"Project name","details":"Work completed","reported_by":["Person name"]}],
+  "blockers_and_delays": [{"project":"Project name","details":"Issue or delay","reported_by":["Person name"]}],
+  "safety": [{"project":"Project name","details":"Safety observation","reported_by":["Person name"]}],
+  "tomorrow_plan": [{"project":"Project name","details":"Explicitly stated next work","reported_by":["Person name"]}],
+  "contributors": [{"name":"Person name","projects":["Project name"]}]
+}
+Use empty arrays when a category was not mentioned. Every material item must identify who reported it.`
     : `Detect whether the construction field report is Persian or English. If Persian, translate it into clear professional English. If already English, preserve its meaning and lightly clean grammar only. ${CONSTRUCTION_GLOSSARY} Never invent facts. Return only valid JSON with keys english_text and english_summary. english_summary must be one concise sentence.`;
   const input = isSummary ? JSON.stringify(body.reports || []) : String(body.text || "");
   if (!input.trim()) return json(400, { error: "Report text is required" });
@@ -42,7 +53,14 @@ export default async (request) => {
   });
   if (!response.ok) return json(502, { error: "Translation service is temporarily unavailable" });
   const text = outputText(await response.json()).trim();
-  if (isSummary) return json(200, { english_summary: text });
+  if (isSummary) {
+    try {
+      const dailySummary = JSON.parse(text.replace(/^```json\s*|\s*```$/g, ""));
+      return json(200, { daily_summary: dailySummary, english_summary: JSON.stringify(dailySummary) });
+    } catch {
+      return json(502, { error: "The daily analysis could not be structured. Please try again." });
+    }
+  }
   try {
     return json(200, JSON.parse(text.replace(/^```json\s*|\s*```$/g, "")));
   } catch {

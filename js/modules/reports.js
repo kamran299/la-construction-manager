@@ -1,6 +1,28 @@
 function escapeHtml(value) { return String(value || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[c]); }
 function today() { return new Date().toLocaleDateString("en-CA"); }
 
+function parseDailySummary(value) {
+  try { return JSON.parse(value); } catch { return null; }
+}
+
+function renderAnalysisItems(title, items, emptyText) {
+  const rows = Array.isArray(items) ? items : [];
+  return `<section class="analysis-section"><h3>${escapeHtml(title)}</h3>${rows.length ? `<ul>${rows.map((item) => `<li><div><strong>${escapeHtml(item.project || "General")}</strong><p>${escapeHtml(item.details)}</p></div><small>Reported by ${escapeHtml((item.reported_by || []).join(", ") || "Unknown")}</small></li>`).join("")}</ul>` : `<p class="analysis-empty">${escapeHtml(emptyText)}</p>`}</section>`;
+}
+
+function renderDailySummary(value) {
+  const analysis = parseDailySummary(value);
+  if (!analysis) return `<h2>End-of-day summary</h2><p>${escapeHtml(value)}</p>`;
+  const contributors = Array.isArray(analysis.contributors) ? analysis.contributors : [];
+  return `<header class="analysis-header"><div><span>AI DAILY ANALYSIS</span><h2>End-of-day management report</h2></div><strong>${contributors.length} contributor${contributors.length === 1 ? "" : "s"}</strong></header>
+    <section class="analysis-overview"><h3>Executive summary</h3><p>${escapeHtml(analysis.executive_summary || "No overall conclusion was available.")}</p></section>
+    ${renderAnalysisItems("Work completed", analysis.completed_work, "No completed work was reported.")}
+    ${renderAnalysisItems("Blockers and delays", analysis.blockers_and_delays, "No blockers or delays were reported.")}
+    ${renderAnalysisItems("Safety", analysis.safety, "No safety observations were reported.")}
+    ${renderAnalysisItems("Tomorrow's plan", analysis.tomorrow_plan, "No work for tomorrow was reported.")}
+    <section class="analysis-section analysis-contributors"><h3>Reports included</h3>${contributors.length ? `<ul>${contributors.map((person) => `<li><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml((person.projects || []).join(", ") || "General")}</small></li>`).join("")}</ul>` : `<p class="analysis-empty">No contributors were listed.</p>`}</section>`;
+}
+
 export function createReportsModule({ supabase, session, companyId, membership, canManage }) {
   const form = document.querySelector("#reportForm");
   const list = document.querySelector("#reportsList");
@@ -131,7 +153,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     });
     const { data: saved } = await supabase.from("daily_report_summaries").select("english_summary").eq("company_id", companyId).eq("report_date", filterDate.value).maybeSingle();
     summary.hidden = !saved;
-    if (saved) summary.innerHTML = `<h2>End-of-day summary</h2><p>${escapeHtml(saved.english_summary)}</p>`;
+    if (saved) summary.innerHTML = renderDailySummary(saved.english_summary);
   }
 
   async function deleteReport(reportId, button) {
@@ -170,13 +192,13 @@ export function createReportsModule({ supabase, session, companyId, membership, 
 
   summaryButton.addEventListener("click", async () => {
     if (!reports.length) return;
-    summaryButton.disabled = true; summaryButton.textContent = "Creating summary...";
+    summaryButton.disabled = true; summaryButton.textContent = "Analyzing reports...";
     try {
       const data = await callAi({ action: "summarize", reports: reports.map((r) => ({ submitted_by: r.reporter_name, project: projects.find((p) => p.id === r.project_id)?.name || "General", report: r.english_text })) });
       const { error } = await supabase.from("daily_report_summaries").upsert({ company_id: companyId, report_date: filterDate.value, english_summary: data.english_summary, generated_by: session.user.id, updated_at: new Date().toISOString() }, { onConflict: "company_id,report_date" });
       if (error) throw error; await loadReports();
     } catch (error) { message.textContent = error.message || "The summary could not be created."; message.hidden = false; }
-    finally { summaryButton.disabled = false; summaryButton.textContent = "Create end-of-day summary"; }
+    finally { summaryButton.disabled = false; summaryButton.textContent = "Analyze daily reports"; }
   });
   filterDate.addEventListener("change", loadReports);
   return { load: async () => { await loadProjects(); await loadReports(); } };
