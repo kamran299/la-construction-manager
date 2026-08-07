@@ -23,6 +23,24 @@ function renderDailySummary(value) {
     <section class="analysis-section analysis-contributors"><h3>Reports included</h3>${contributors.length ? `<ul>${contributors.map((person) => `<li><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml((person.projects || []).join(", ") || "General")}</small></li>`).join("")}</ul>` : `<p class="analysis-empty">No contributors were listed.</p>`}</section>`;
 }
 
+function formatReportDate(value) {
+  if (!value) return "";
+  return new Date(`${value}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+}
+
+function printableReport(report, project, metaLabel, metaValue) {
+  return `<article class="pdf-report"><header><div><h3>${escapeHtml(report.reporter_name || "Unknown")}</h3><small>${escapeHtml(report.reporter_email || "")}</small></div><span>${escapeHtml(metaValue || "General")}</span></header><p>${escapeHtml(report.english_text || "No report details were provided.")}</p>${report.english_summary ? `<aside><strong>Quick note</strong>${escapeHtml(report.english_summary)}</aside>` : ""}<footer>${escapeHtml(metaLabel)}: ${escapeHtml(metaValue || project?.name || "General")}</footer></article>`;
+}
+
+function openPdfPrintView({ title, subtitle, body }) {
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) throw new Error("Please allow pop-ups so the PDF can open.");
+  printWindow.document.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>
+    @page{size:letter;margin:.55in}*{box-sizing:border-box}body{margin:0;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-size:10.5pt;line-height:1.5}button{position:fixed;right:18px;top:18px;border:0;border-radius:9px;background:#e96614;color:#fff;padding:11px 16px;font-weight:800;cursor:pointer}.pdf-heading{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #e96614;padding-bottom:18px;margin-bottom:24px}.brand{display:flex;align-items:center;gap:12px}.brand-mark{display:grid;place-items:center;width:48px;height:48px;border:2px solid #e96614;border-radius:12px;font-weight:900}.brand strong{display:block;font-size:16pt}.brand small,.pdf-heading>div:last-child{color:#667085}.pdf-heading>div:last-child{text-align:right}.pdf-heading h1{font-size:21pt;margin:4px 0}.pdf-group{break-inside:avoid-page;margin:0 0 26px}.pdf-group>header{display:flex;justify-content:space-between;gap:16px;align-items:end;background:#152238;color:#fff;border-radius:12px;padding:13px 16px;margin-bottom:10px}.pdf-group h2{font-size:15pt;margin:0}.pdf-group header small{color:#d8deea}.pdf-report{break-inside:avoid;border:1px solid #dfe3ea;border-radius:12px;padding:14px 16px;margin:0 0 10px}.pdf-report header{display:flex;justify-content:space-between;gap:15px;border-bottom:1px solid #e6e9ef;padding-bottom:8px}.pdf-report h3{margin:0;font-size:11.5pt}.pdf-report header small{color:#667085}.pdf-report header span{background:#fff2e9;color:#c95108;border-radius:999px;padding:4px 9px;font-size:8.5pt;font-weight:800}.pdf-report p{white-space:pre-wrap;margin:12px 0}.pdf-report aside{background:#f5f7fa;border-left:3px solid #e96614;padding:8px 10px;color:#4b5563}.pdf-report aside strong{margin-right:7px;color:#111827}.pdf-report footer{margin-top:9px;color:#7a8497;font-size:8.5pt}.analysis-header{display:flex;justify-content:space-between;gap:20px}.analysis-header span{color:#e96614;font-weight:800;letter-spacing:.12em}.analysis-header h2{font-size:18pt;margin:3px 0}.analysis-overview,.analysis-section{break-inside:avoid;border:1px solid #dfe3ea;border-radius:12px;padding:14px 16px;margin-bottom:12px}.analysis-overview h3,.analysis-section h3{margin:0 0 7px}.analysis-overview p,.analysis-section p{margin:0}.analysis-section ul{list-style:none;margin:0;padding:0}.analysis-section li{display:flex;justify-content:space-between;gap:18px;border-top:1px solid #e6e9ef;padding:9px 0}.analysis-section li:first-child{border-top:0}.analysis-section li small{color:#667085}.analysis-empty{color:#7a8497}.pdf-empty{padding:30px;border:1px dashed #cfd5df;border-radius:12px;text-align:center;color:#667085}.pdf-footer{border-top:1px solid #dfe3ea;margin-top:24px;padding-top:10px;color:#7a8497;font-size:8.5pt}@media print{button{display:none}}
+  </style></head><body><button onclick="window.print()">Save as PDF</button><header class="pdf-heading"><div class="brand"><span class="brand-mark">L&amp;A</span><div><strong>Construction Manager</strong><small>Daily field reporting</small></div></div><div><h1>${escapeHtml(title)}</h1><span>${escapeHtml(subtitle)}</span></div></header>${body}<footer class="pdf-footer">Generated from L&amp;A Construction Manager</footer><script>setTimeout(()=>{window.focus();window.print()},350)<\/script></body></html>`);
+  printWindow.document.close();
+}
+
 export function createReportsModule({ supabase, session, companyId, membership, canManage }) {
   const form = document.querySelector("#reportForm");
   const list = document.querySelector("#reportsList");
@@ -35,6 +53,9 @@ export function createReportsModule({ supabase, session, companyId, membership, 
   const reportText = document.querySelector("#reportText");
   const recordButton = document.querySelector("#recordReportButton");
   const recordingStatus = document.querySelector("#recordingStatus");
+  const employeePdfButton = document.querySelector("#employeeReportsPdfButton");
+  const projectPdfButton = document.querySelector("#projectReportsPdfButton");
+  const summaryPdfButton = document.querySelector("#summaryPdfButton");
   reportDate.value = filterDate.value = today();
   summaryButton.hidden = !canManage;
   let projects = [];
@@ -42,6 +63,44 @@ export function createReportsModule({ supabase, session, companyId, membership, 
   let recorder = null;
   let microphoneStream = null;
   let audioChunks = [];
+  let savedSummaryValue = "";
+
+  function projectFor(report) { return projects.find((project) => project.id === report.project_id); }
+
+  function setPdfAvailability() {
+    employeePdfButton.disabled = !reports.length;
+    projectPdfButton.disabled = !reports.length;
+    summaryPdfButton.disabled = !savedSummaryValue;
+  }
+
+  function showPdfError(error) {
+    message.textContent = error.message || "The PDF could not be opened.";
+    message.classList.add("message-error");
+    message.hidden = false;
+  }
+
+  function exportGroupedPdf(groupBy) {
+    try {
+      const groups = new Map();
+      reports.forEach((report) => {
+        const project = projectFor(report);
+        const isEmployee = groupBy === "employee";
+        const key = isEmployee ? (report.reporter_id || report.reporter_email || report.reporter_name) : (report.project_id || "general");
+        const current = groups.get(key) || { title: isEmployee ? (report.reporter_name || "Unknown") : (project?.name || "General / no project"), subtitle: isEmployee ? (report.reporter_email || "") : (project?.address || ""), reports: [] };
+        current.reports.push({ report, project });
+        groups.set(key, current);
+      });
+      const body = [...groups.values()].sort((a, b) => a.title.localeCompare(b.title)).map((group) => `<section class="pdf-group"><header><div><h2>${escapeHtml(group.title)}</h2><small>${escapeHtml(group.subtitle)}</small></div><strong>${group.reports.length} report${group.reports.length === 1 ? "" : "s"}</strong></header>${group.reports.map(({ report, project }) => printableReport(report, project, groupBy === "employee" ? "Project" : "Submitted by", groupBy === "employee" ? (project?.name || "General") : (report.reporter_name || "Unknown"))).join("")}</section>`).join("") || '<div class="pdf-empty">No reports were submitted for this date.</div>';
+      openPdfPrintView({ title: groupBy === "employee" ? "Daily reports by employee" : "Daily reports by project", subtitle: formatReportDate(filterDate.value), body });
+    } catch (error) { showPdfError(error); }
+  }
+
+  function exportSummaryPdf() {
+    try {
+      if (!savedSummaryValue) throw new Error("Create the AI daily analysis first.");
+      openPdfPrintView({ title: "AI end-of-day analysis", subtitle: formatReportDate(filterDate.value), body: renderDailySummary(savedSummaryValue) });
+    } catch (error) { showPdfError(error); }
+  }
 
   function setRecordingStatus(text, state = "") {
     recordingStatus.textContent = text;
@@ -152,8 +211,10 @@ export function createReportsModule({ supabase, session, companyId, membership, 
       button.addEventListener("click", () => deleteReport(button.dataset.deleteReport, button));
     });
     const { data: saved } = await supabase.from("daily_report_summaries").select("english_summary").eq("company_id", companyId).eq("report_date", filterDate.value).maybeSingle();
+    savedSummaryValue = saved?.english_summary || "";
     summary.hidden = !saved;
     if (saved) summary.innerHTML = renderDailySummary(saved.english_summary);
+    setPdfAvailability();
   }
 
   async function deleteReport(reportId, button) {
@@ -201,5 +262,9 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     finally { summaryButton.disabled = false; summaryButton.textContent = "Analyze daily reports"; }
   });
   filterDate.addEventListener("change", loadReports);
+  employeePdfButton.addEventListener("click", () => exportGroupedPdf("employee"));
+  projectPdfButton.addEventListener("click", () => exportGroupedPdf("project"));
+  summaryPdfButton.addEventListener("click", exportSummaryPdf);
+  setPdfAvailability();
   return { load: async () => { await loadProjects(); await loadReports(); } };
 }
