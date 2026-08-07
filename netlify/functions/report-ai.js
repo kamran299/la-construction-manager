@@ -25,7 +25,7 @@ export default async (request) => {
   const isSummary = body.action === "summarize";
   const instructions = isSummary
     ? "Create a concise professional English end-of-day construction report. Group work by employee, preserve project names, mention blockers, safety issues, decisions, and next actions. Clearly name who submitted each item. Return only the report text."
-    : "Translate the Persian construction field report into clear professional English without inventing facts. Return only valid JSON with keys english_text and english_summary. english_summary must be one concise sentence.";
+    : "Detect whether the construction field report is Persian or English. If Persian, translate it into clear professional English. If already English, preserve its meaning and lightly clean grammar only. Use correct construction terminology (for example, تراک کانکریت means a truckload of concrete) and never invent facts. Return only valid JSON with keys english_text and english_summary. english_summary must be one concise sentence.";
   const input = isSummary ? JSON.stringify(body.reports || []) : String(body.text || "");
   if (!input.trim()) return json(400, { error: "Report text is required" });
 

@@ -68,7 +68,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
         recordButton.disabled = true;
         recordButton.classList.remove("is-recording");
         recordButton.innerHTML = '<span aria-hidden="true">🎙</span> Start voice report';
-        setRecordingStatus("Converting your Persian voice to text...", "working");
+        setRecordingStatus("Converting your voice to text...", "working");
         try {
           await transcribeRecording(new Blob(audioChunks, { type: audioType }));
           setRecordingStatus("Voice converted to text. Review it above, then save the report.", "success");
@@ -83,7 +83,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
       recorder.start(1000);
       recordButton.classList.add("is-recording");
       recordButton.innerHTML = '<span aria-hidden="true">■</span> Stop recording';
-      setRecordingStatus("Recording now — speak in Persian, then tap Stop.", "recording");
+      setRecordingStatus("Recording now — speak in Persian or English, then tap Stop.", "recording");
     } catch (error) {
       stopMicrophone();
       setRecordingStatus(error.name === "NotAllowedError" ? "Microphone permission was not allowed. Please allow it and try again." : "The microphone could not be started.", "error");
@@ -120,7 +120,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     reports = data || [];
     list.innerHTML = reports.length ? reports.map((r) => {
       const project = projects.find((p) => p.id === r.project_id);
-      return `<article class="workspace-card report-card"><header><div><strong>${escapeHtml(r.reporter_name)}</strong><small>${escapeHtml(r.reporter_email || "")}</small></div><span>${escapeHtml(project?.name || "General")}</span></header><div class="report-original" dir="rtl" lang="fa">${escapeHtml(r.original_text)}</div><div class="report-english"><b>English</b><p>${escapeHtml(r.english_text)}</p><small>${escapeHtml(r.english_summary)}</small></div></article>`;
+      return `<article class="workspace-card report-card"><header><div><strong>${escapeHtml(r.reporter_name)}</strong><small>${escapeHtml(r.reporter_email || "")}</small></div><span>${escapeHtml(project?.name || "General")}</span></header><div class="report-original" dir="auto">${escapeHtml(r.original_text)}</div><div class="report-english"><b>English</b><p>${escapeHtml(r.english_text)}</p><small>${escapeHtml(r.english_summary)}</small></div></article>`;
     }).join("") : '<div class="empty-projects">No reports were submitted for this date.</div>';
     const { data: saved } = await supabase.from("daily_report_summaries").select("english_summary").eq("company_id", companyId).eq("report_date", filterDate.value).maybeSingle();
     summary.hidden = !saved;
@@ -132,7 +132,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     const button = document.querySelector("#submitReportButton");
     const text = reportText.value.trim();
     if (!text) return;
-    button.disabled = true; button.textContent = "Translating & saving...";
+    button.disabled = true; button.textContent = "Saving report...";
     try {
       const translated = await callAi({ action: "translate", text });
       const name = membership.full_name || session.user.user_metadata?.full_name || session.user.email.split("@")[0];
@@ -140,7 +140,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
       if (error) throw error;
       reportText.value = ""; filterDate.value = reportDate.value; await loadReports();
     } catch (error) { message.textContent = error.message || "The report could not be saved."; message.classList.add("message-error"); message.hidden = false; }
-    finally { button.disabled = false; button.textContent = "Translate & save report"; }
+    finally { button.disabled = false; button.textContent = "Save report"; }
   });
 
   summaryButton.addEventListener("click", async () => {

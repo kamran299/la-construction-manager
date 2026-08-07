@@ -11,8 +11,7 @@ async function transcribe(openaiKey, audio, model) {
   const body = new FormData();
   body.append("file", audio, audio.name || "persian-report.webm");
   body.append("model", model);
-  body.append("language", "fa");
-  body.append("prompt", "A Persian daily construction field report containing project names, addresses, trade work, materials, safety notes, delays, and next steps.");
+  body.append("prompt", "A Persian or English daily construction field report containing project names, addresses, trade work, materials, safety notes, delays, and next steps. Preserve construction terminology accurately.");
   return fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
     headers: { authorization: `Bearer ${openaiKey}` },

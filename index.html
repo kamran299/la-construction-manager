@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/login.css">
     <link rel="stylesheet" href="/css/dashboard.css">
-    <script type="module" src="/js/app.js?v=20260806-4"></script>
+    <script type="module" src="/js/app.js?v=20260806-5"></script>
   </head>
   <body>
     <main id="loginView" class="login-layout">
@@ -161,16 +161,16 @@
         <div class="reports-layout">
           <section class="workspace-card report-form-card">
             <h2>New daily report</h2>
-            <p>Write naturally in Persian. The original and English version will both be saved.</p>
+            <p>Type or record your report in Persian or English. An English version will be saved automatically.</p>
             <form id="reportForm">
               <label for="reportDate">Work date</label><input id="reportDate" type="date" required>
               <label for="reportProject">Project</label><select id="reportProject"><option value="">General / no project</option></select>
-              <label for="reportText">گزارش فارسی</label><textarea id="reportText" dir="rtl" lang="fa" rows="8" placeholder="امروز چه کارهایی انجام شد؟ مشکل یا تأخیری وجود داشت؟" required></textarea>
+              <label for="reportText">Report details</label><textarea id="reportText" dir="auto" rows="8" placeholder="What work was completed today? Include delays, safety issues, and next steps." required></textarea>
               <div class="voice-report-controls">
                 <button id="recordReportButton" class="voice-report-button" type="button"><span aria-hidden="true">🎙</span> Start voice report</button>
-                <p id="recordingStatus" class="recording-status" role="status">Speak in Persian. Your words will appear above.</p>
+                <p id="recordingStatus" class="recording-status" role="status">Speak in Persian or English. Your words will appear above.</p>
               </div>
-              <button id="submitReportButton" class="primary-button" type="submit">Translate &amp; save report</button>
+              <button id="submitReportButton" class="primary-button" type="submit">Save report</button>
             </form>
           </section>
           <section class="reports-column">
