@@ -15,7 +15,13 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
   const form = document.querySelector("#projectForm");
   const addressInput = document.querySelector("#projectAddress");
   const message = document.querySelector("#projectsMessage");
+  const projectsGrid = projectsView.querySelector(".projects-grid");
+  const formCard = projectsView.querySelector(".project-form-card");
+  const title = document.querySelector("#projectsTitle");
+  const backButton = document.querySelector("#backToDashboard");
   let isRepairingTasks = false;
+  let loadedProjects = [];
+  let selectedProjectId = null;
 
   function navigate(showProjects) {
     dashboardContent.hidden = showProjects;
@@ -25,7 +31,10 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
     dashboardNav.classList.toggle("is-active", !showProjects);
     dashboardNav.toggleAttribute("aria-current", !showProjects);
     document.querySelector("#projectsNav").toggleAttribute("aria-current", showProjects);
-    if (showProjects) loadProjects();
+    if (showProjects) {
+      selectedProjectId = null;
+      loadProjects();
+    }
   }
 
   async function loadProjects() {
@@ -48,22 +57,55 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
         return loadProjects();
       }
     }
-    render(projects);
+    loadedProjects = projects;
+    const selectedProject = projects.find(({ id }) => id === selectedProjectId);
+    if (selectedProject) renderProject(selectedProject); else renderProjectList(projects);
     onCountChange(projects.length);
   }
 
-  function render(projects) {
+  function showProjectList() {
+    selectedProjectId = null;
+    renderProjectList(loadedProjects);
+  }
+
+  function renderProjectList(projects) {
+    title.textContent = "Projects";
+    backButton.textContent = "Dashboard";
+    formCard.hidden = !canManage;
+    projectsGrid.classList.remove("project-detail-mode");
     if (!projects.length) {
       list.innerHTML = '<div class="empty-projects">No projects yet. Create the first project to add its construction phases.</div>';
       return;
     }
     list.innerHTML = projects.map((project) => {
       const phases = [...(project.project_phases || [])].sort((a, b) => a.sort_order - b.sort_order);
-      return `<article class="project-card">
-        <div class="project-card-header"><div><h2>${escapeHtml(project.name)}</h2><div class="project-address">${escapeHtml(project.address || "No address")}</div></div><div class="overall-progress">${project.progress_percent}%</div></div>
-        <div class="phase-list">${phases.map((phase) => {
-          const tasks = [...(phase.project_tasks || [])].sort((a, b) => a.sort_order - b.sort_order);
-          return `<details class="phase-group">
+      return `<button class="project-summary-card" type="button" data-project-id="${project.id}">
+        <span class="project-card-header"><span><strong>${escapeHtml(project.name)}</strong><small>${escapeHtml(project.address || "No address")}</small></span><b>${project.progress_percent}%</b></span>
+        <span class="project-phase-preview">${phases.map((phase) => `<span><small>${escapeHtml(phase.name)}</small><i style="--progress:${phase.progress_percent}%"></i></span>`).join("")}</span>
+        <span class="open-project-label">Open project <span aria-hidden="true">→</span></span>
+      </button>`;
+    }).join("");
+
+    list.querySelectorAll("[data-project-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        selectedProjectId = button.dataset.projectId;
+        renderProject(projects.find(({ id }) => id === selectedProjectId));
+      });
+    });
+  }
+
+  function renderProject(project) {
+    if (!project) return showProjectList();
+    title.textContent = project.name;
+    backButton.textContent = "Back to projects";
+    formCard.hidden = true;
+    projectsGrid.classList.add("project-detail-mode");
+    const phases = [...(project.project_phases || [])].sort((a, b) => a.sort_order - b.sort_order);
+    list.innerHTML = `<article class="project-card project-detail-card">
+      <div class="project-card-header"><div><h2>Construction plan</h2><div class="project-address">${escapeHtml(project.address || "No address")}</div></div><div class="overall-progress">${project.progress_percent}%</div></div>
+      <div class="phase-list">${phases.map((phase) => {
+        const tasks = [...(phase.project_tasks || [])].sort((a, b) => a.sort_order - b.sort_order);
+        return `<details class="phase-group">
             <summary><span>${escapeHtml(phase.name)}</span><span class="phase-summary-progress"><i style="--progress:${phase.progress_percent}%"></i><strong>${phase.progress_percent}%</strong></span></summary>
             <div class="task-list">${tasks.length ? tasks.map((task) => `<div class="task-row">
               <div class="task-info"><strong>${escapeHtml(task.name)}</strong><span>${escapeHtml(task.responsible_trade)} · Typical ${task.duration_days} ${task.duration_days === 1 ? "day" : "days"}</span></div>
@@ -71,9 +113,8 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
               <span class="task-value">${task.progress_percent}%</span>
             </div>`).join("") : '<p class="no-tasks">Detailed tasks must be added to this phase.</p>'}</div>
           </details>`;
-        }).join("")}</div>
-      </article>`;
-    }).join("");
+      }).join("")}</div>
+    </article>`;
 
     list.querySelectorAll("input[data-task-id]").forEach((input) => {
       input.addEventListener("input", () => { input.nextElementSibling.textContent = `${input.value}%`; });
@@ -105,7 +146,9 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
 
   document.querySelector("#projectsNav").addEventListener("click", (event) => { event.preventDefault(); navigate(true); });
   document.querySelector('.nav-item[href="#dashboard"]').addEventListener("click", (event) => { event.preventDefault(); navigate(false); });
-  document.querySelector("#backToDashboard").addEventListener("click", () => navigate(false));
+  backButton.addEventListener("click", () => {
+    if (selectedProjectId) showProjectList(); else navigate(false);
+  });
   if (!canManage) document.querySelector(".project-form-card").hidden = true;
   else enableAddressAutocomplete(addressInput).catch(() => {
     addressInput.placeholder = "Enter the full project address";
