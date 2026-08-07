@@ -41,7 +41,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     if (blob.size > 4 * 1024 * 1024) throw new Error("The recording is too long. Please record a shorter report.");
     const formData = new FormData();
     const extension = blob.type.includes("mp4") ? "m4a" : "webm";
-    formData.append("audio", blob, `persian-report.${extension}`);
+    formData.append("audio", blob, `field-report.${extension}`);
     const response = await fetch("/.netlify/functions/report-transcribe", {
       method: "POST",
       headers: { authorization: `Bearer ${session.access_token}` },
@@ -51,7 +51,10 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     if (!response.ok) throw new Error(data.error || "The voice report could not be converted to text.");
     const spokenText = String(data.text || "").trim();
     if (!spokenText) throw new Error("No speech was detected. Please try again.");
-    reportText.value = [reportText.value.trim(), spokenText].filter(Boolean).join("\n");
+    const translated = await callAi({ action: "translate", text: spokenText });
+    const englishText = String(translated.english_text || "").trim();
+    if (!englishText) throw new Error("The voice report could not be translated to English.");
+    reportText.value = [reportText.value.trim(), englishText].filter(Boolean).join("\n");
     reportText.focus();
   }
 
@@ -71,7 +74,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
         setRecordingStatus("Converting your voice to text...", "working");
         try {
           await transcribeRecording(new Blob(audioChunks, { type: audioType }));
-          setRecordingStatus("Voice converted to text. Review it above, then save the report.", "success");
+          setRecordingStatus("Voice converted to English. Review it above, then save the report.", "success");
         } catch (error) {
           setRecordingStatus(error.message || "The recording could not be transcribed.", "error");
         } finally {
