@@ -12,6 +12,11 @@ function outputText(data) {
   return (data.output || []).flatMap((item) => item.content || []).filter((item) => item.type === "output_text").map((item) => item.text).join("\n");
 }
 
+function parseModelJson(text) {
+  const cleaned = String(text || "").trim().replace(/^```(?:json)?\s*|\s*```$/gi, "");
+  return JSON.parse(cleaned);
+}
+
 const CONSTRUCTION_GLOSSARY = `
 Apply this L&A Custom Homes glossary exactly:
 Poly (پُلی/پلی) is a person's name, never plate compactor. Subfloor (ساب فلور/ساب‌فلور) means subfloor, never scaffolding. تراک کانکریت means a truckload of concrete.
@@ -27,22 +32,38 @@ export default async (request) => {
   if (!token || !supabaseUrl || !publicKey || !openaiKey) return json(401, { error: "Service is not configured" });
   if (!(await verifyUser(token, supabaseUrl, publicKey))) return json(401, { error: "Invalid session" });
 
-  const body = await request.json();
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object") return json(400, { error: "A valid JSON request is required" });
   const isSummary = body.action === "summarize";
   const instructions = isSummary
-    ? `Create a professional English daily construction management analysis from the submitted field reports. ${CONSTRUCTION_GLOSSARY}
+    ? `Create a professional 5 PM English construction management summary from the submitted daily field reports. ${CONSTRUCTION_GLOSSARY}
 Never invent facts, assumptions, safety events, delays, or tomorrow tasks. Preserve exact names, project names, quantities, times, dates, and construction terms. Merge duplicate facts only when they clearly describe the same work. If reports conflict, keep both facts and identify their reporters.
 Return only valid JSON with exactly this structure:
 {
   "executive_summary": "A concise overall conclusion for the day.",
   "completed_work": [{"project":"Project name","details":"Work completed","reported_by":["Person name"]}],
   "blockers_and_delays": [{"project":"Project name","details":"Issue or delay","reported_by":["Person name"]}],
-  "safety": [{"project":"Project name","details":"Safety observation","reported_by":["Person name"]}],
   "tomorrow_plan": [{"project":"Project name","details":"Explicitly stated next work","reported_by":["Person name"]}],
+  "labor": [{"project":"Project name","details":"Crew, trade, worker count, hours, or labor activity","reported_by":["Person name"]}],
+  "inspections": [{"project":"Project name","details":"Inspection status, result, correction, or explicitly requested inspection","reported_by":["Person name"]}],
+  "materials_needed": [{"project":"Project name","details":"Material explicitly needed, ordered, missing, or awaiting delivery","reported_by":["Person name"]}],
+  "overdue_work": [{"project":"Project name","details":"Work explicitly reported late, missed, unfinished, or carried over","reported_by":["Person name"]}],
+  "risks": [{"project":"Project name","details":"Explicit schedule, safety, quality, cost, access, weather, or coordination risk","reported_by":["Person name"]}],
   "contributors": [{"name":"Person name","projects":["Project name"]}]
 }
 Use empty arrays when a category was not mentioned. Every material item must identify who reported it.`
-    : `Detect whether the construction field report is Persian or English. If Persian, translate it into clear professional English. If already English, preserve its meaning and lightly clean grammar only. ${CONSTRUCTION_GLOSSARY} Never invent facts. Return only valid JSON with keys english_text and english_summary. english_summary must be one concise sentence.`;
+    : `Detect whether the construction field report is Persian or English. If Persian, translate it into clear professional English. If already English, preserve its meaning and lightly clean grammar only. ${CONSTRUCTION_GLOSSARY}
+Never invent, infer, or fill in missing facts. Return only valid JSON with exactly this structure:
+{
+  "english_text": "Faithful cleaned English version of the complete report",
+  "english_summary": "One concise sentence describing the report",
+  "completed": ["Work explicitly completed or performed"],
+  "blockers": ["Explicit issue, delay, dependency, or problem"],
+  "next_actions": ["Explicit next step or planned work"],
+  "labor": ["Crew, trade, worker count, hours, or labor activity"],
+  "inspection": ["Inspection status, result, correction, or explicitly requested inspection"]
+}
+Use an empty array for every category not explicitly mentioned.`;
   const input = isSummary ? JSON.stringify(body.reports || []) : String(body.text || "");
   if (!input.trim()) return json(400, { error: "Report text is required" });
 
@@ -51,19 +72,26 @@ Use empty arrays when a category was not mentioned. Every material item must ide
     headers: { authorization: `Bearer ${openaiKey}`, "content-type": "application/json" },
     body: JSON.stringify({ model: Netlify.env.get("OPENAI_MODEL") || "gpt-4.1-mini", instructions, input }),
   });
-  if (!response.ok) return json(502, { error: "Translation service is temporarily unavailable" });
-  const text = outputText(await response.json()).trim();
+  if (!response.ok) {
+    const failure = await response.json().catch(() => ({}));
+    console.error("OpenAI report processing failed", response.status, failure?.error?.message || "Unknown upstream error");
+    return json(502, { error: isSummary ? "The 5 PM summary is temporarily unavailable. Please try again." : "AI report processing is temporarily unavailable. Please try again." });
+  }
+  const responseData = await response.json().catch(() => null);
+  const text = outputText(responseData || {}).trim();
+  if (!text) return json(502, { error: "The AI service returned an empty response. Please try again." });
   if (isSummary) {
     try {
-      const dailySummary = JSON.parse(text.replace(/^```json\s*|\s*```$/g, ""));
+      const dailySummary = parseModelJson(text);
       return json(200, { daily_summary: dailySummary, english_summary: JSON.stringify(dailySummary) });
     } catch {
       return json(502, { error: "The daily analysis could not be structured. Please try again." });
     }
   }
   try {
-    return json(200, JSON.parse(text.replace(/^```json\s*|\s*```$/g, "")));
+    const report = parseModelJson(text);
+    return json(200, { ...report, structured_report: report });
   } catch {
-    return json(200, { english_text: text, english_summary: text.split(/[.!?]/)[0] });
+    return json(502, { error: "The AI report could not be structured. Please try again." });
   }
 };

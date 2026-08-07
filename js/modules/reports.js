@@ -5,6 +5,30 @@ function parseDailySummary(value) {
   try { return JSON.parse(value); } catch { return null; }
 }
 
+function parseStructuredReport(value) {
+  const parsed = parseDailySummary(value);
+  return parsed && Array.isArray(parsed.completed) ? parsed : null;
+}
+
+function renderReportItems(title, items) {
+  const rows = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!rows.length) return "";
+  return `<section><strong>${escapeHtml(title)}</strong><ul>${rows.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>`;
+}
+
+function renderStructuredReport(value) {
+  const report = parseStructuredReport(value);
+  if (!report) return value ? `<small>${escapeHtml(value)}</small>` : "";
+  return `<div class="report-structured">
+    ${renderReportItems("Completed", report.completed)}
+    ${renderReportItems("Blockers", report.blockers)}
+    ${renderReportItems("Next actions", report.next_actions)}
+    ${renderReportItems("Labor", report.labor)}
+    ${renderReportItems("Inspection", report.inspection)}
+    ${report.english_summary ? `<small>${escapeHtml(report.english_summary)}</small>` : ""}
+  </div>`;
+}
+
 function renderAnalysisItems(title, items, emptyText) {
   const rows = Array.isArray(items) ? items : [];
   return `<section class="analysis-section"><h3>${escapeHtml(title)}</h3>${rows.length ? `<ul>${rows.map((item) => `<li><div><strong>${escapeHtml(item.project || "General")}</strong><p>${escapeHtml(item.details)}</p></div><small>Reported by ${escapeHtml((item.reported_by || []).join(", ") || "Unknown")}</small></li>`).join("")}</ul>` : `<p class="analysis-empty">${escapeHtml(emptyText)}</p>`}</section>`;
@@ -18,8 +42,12 @@ function renderDailySummary(value) {
     <section class="analysis-overview"><h3>Executive summary</h3><p>${escapeHtml(analysis.executive_summary || "No overall conclusion was available.")}</p></section>
     ${renderAnalysisItems("Work completed", analysis.completed_work, "No completed work was reported.")}
     ${renderAnalysisItems("Blockers and delays", analysis.blockers_and_delays, "No blockers or delays were reported.")}
-    ${renderAnalysisItems("Safety", analysis.safety, "No safety observations were reported.")}
     ${renderAnalysisItems("Tomorrow's plan", analysis.tomorrow_plan, "No work for tomorrow was reported.")}
+    ${renderAnalysisItems("Labor", analysis.labor, "No labor details were reported.")}
+    ${renderAnalysisItems("Inspections", analysis.inspections, "No inspections were reported.")}
+    ${renderAnalysisItems("Materials needed", analysis.materials_needed, "No material needs were reported.")}
+    ${renderAnalysisItems("Overdue work", analysis.overdue_work, "No overdue work was reported.")}
+    ${renderAnalysisItems("Risks", analysis.risks, "No risks were reported.")}
     <section class="analysis-section analysis-contributors"><h3>Reports included</h3>${contributors.length ? `<ul>${contributors.map((person) => `<li><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml((person.projects || []).join(", ") || "General")}</small></li>`).join("")}</ul>` : `<p class="analysis-empty">No contributors were listed.</p>`}</section>`;
 }
 
@@ -29,7 +57,9 @@ function formatReportDate(value) {
 }
 
 function printableReport(report, project, metaLabel, metaValue) {
-  return `<article class="pdf-report"><header><div><h3>${escapeHtml(report.reporter_name || "Unknown")}</h3><small>${escapeHtml(report.reporter_email || "")}</small></div><span>${escapeHtml(metaValue || "General")}</span></header><p>${escapeHtml(report.english_text || "No report details were provided.")}</p>${report.english_summary ? `<aside><strong>Quick note</strong>${escapeHtml(report.english_summary)}</aside>` : ""}<footer>${escapeHtml(metaLabel)}: ${escapeHtml(metaValue || project?.name || "General")}</footer></article>`;
+  const structured = parseStructuredReport(report.english_summary);
+  const quickNote = structured?.english_summary || (!structured ? report.english_summary : "");
+  return `<article class="pdf-report"><header><div><h3>${escapeHtml(report.reporter_name || "Unknown")}</h3><small>${escapeHtml(report.reporter_email || "")}</small></div><span>${escapeHtml(metaValue || "General")}</span></header><p>${escapeHtml(report.english_text || "No report details were provided.")}</p>${quickNote ? `<aside><strong>Quick note</strong>${escapeHtml(quickNote)}</aside>` : ""}<footer>${escapeHtml(metaLabel)}: ${escapeHtml(metaValue || project?.name || "General")}</footer></article>`;
 }
 
 function openPdfPrintView({ title, subtitle, body }) {
@@ -205,7 +235,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     list.innerHTML = reports.length ? reports.map((r) => {
       const project = projects.find((p) => p.id === r.project_id);
       const canDelete = canManage || r.reporter_id === session.user.id;
-      return `<article class="workspace-card report-card"><header><div><strong>${escapeHtml(r.reporter_name)}</strong><small>${escapeHtml(r.reporter_email || "")}</small></div><div class="report-card-actions"><span>${escapeHtml(project?.name || "General")}</span>${canDelete ? `<button class="report-delete-button" type="button" data-delete-report="${r.id}">Delete</button>` : ""}</div></header><div class="report-english report-english-only"><p>${escapeHtml(r.english_text)}</p><small>${escapeHtml(r.english_summary)}</small></div></article>`;
+      return `<article class="workspace-card report-card"><header><div><strong>${escapeHtml(r.reporter_name)}</strong><small>${escapeHtml(r.reporter_email || "")}</small></div><div class="report-card-actions"><span>${escapeHtml(project?.name || "General")}</span>${canDelete ? `<button class="report-delete-button" type="button" data-delete-report="${r.id}">Delete</button>` : ""}</div></header><div class="report-english report-english-only"><p>${escapeHtml(r.english_text)}</p>${renderStructuredReport(r.english_summary)}</div></article>`;
     }).join("") : '<div class="empty-projects">No reports were submitted for this date.</div>';
     list.querySelectorAll("[data-delete-report]").forEach((button) => {
       button.addEventListener("click", () => deleteReport(button.dataset.deleteReport, button));
@@ -244,7 +274,8 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     try {
       const translated = await callAi({ action: "translate", text });
       const name = membership.full_name || session.user.user_metadata?.full_name || session.user.email.split("@")[0];
-      const { error } = await supabase.from("daily_reports").insert({ company_id: companyId, project_id: projectSelect.value || null, reporter_id: session.user.id, reporter_name: name, reporter_email: membership.email || session.user.email, report_date: reportDate.value, original_text: text, english_text: translated.english_text, english_summary: translated.english_summary });
+      const structuredReport = translated.structured_report || translated;
+      const { error } = await supabase.from("daily_reports").insert({ company_id: companyId, project_id: projectSelect.value || null, reporter_id: session.user.id, reporter_name: name, reporter_email: membership.email || session.user.email, report_date: reportDate.value, original_text: text, english_text: translated.english_text, english_summary: JSON.stringify(structuredReport) });
       if (error) throw error;
       reportText.value = ""; filterDate.value = reportDate.value; await loadReports();
     } catch (error) { message.textContent = error.message || "The report could not be saved."; message.classList.add("message-error"); message.hidden = false; }
@@ -255,11 +286,11 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     if (!reports.length) return;
     summaryButton.disabled = true; summaryButton.textContent = "Analyzing reports...";
     try {
-      const data = await callAi({ action: "summarize", reports: reports.map((r) => ({ submitted_by: r.reporter_name, project: projects.find((p) => p.id === r.project_id)?.name || "General", report: r.english_text })) });
+      const data = await callAi({ action: "summarize", reports: reports.map((r) => ({ submitted_by: r.reporter_name, project: projects.find((p) => p.id === r.project_id)?.name || "General", report: r.english_text, structured_report: parseStructuredReport(r.english_summary) })) });
       const { error } = await supabase.from("daily_report_summaries").upsert({ company_id: companyId, report_date: filterDate.value, english_summary: data.english_summary, generated_by: session.user.id, updated_at: new Date().toISOString() }, { onConflict: "company_id,report_date" });
       if (error) throw error; await loadReports();
     } catch (error) { message.textContent = error.message || "The summary could not be created."; message.hidden = false; }
-    finally { summaryButton.disabled = false; summaryButton.textContent = "Analyze daily reports"; }
+    finally { summaryButton.disabled = false; summaryButton.textContent = "Generate 5 PM project summary"; }
   });
   filterDate.addEventListener("change", loadReports);
   employeePdfButton.addEventListener("click", () => exportGroupedPdf("employee"));
