@@ -37,7 +37,7 @@ function renderStructuredReport(value) {
 
 function renderAnalysisItems(title, items, emptyText) {
   const rows = Array.isArray(items) ? items : [];
-  return `<section class="analysis-section"><h3>${escapeHtml(title)}</h3>${rows.length ? `<ul>${rows.map((item) => `<li><div><strong>${escapeHtml(item.project || "General")}</strong><p>${escapeHtml(item.details)}</p></div><small>Reported by ${escapeHtml((item.reported_by || []).map(displayPersonName).join(", ") || "Unknown")}</small></li>`).join("")}</ul>` : `<p class="analysis-empty">${escapeHtml(emptyText)}</p>`}</section>`;
+  return `<section class="analysis-section"><h3>${escapeHtml(title)}</h3>${rows.length ? `<ul>${rows.map((item) => `<li><div><strong>${escapeHtml(item.project || "General")}</strong><p>${escapeHtml(item.details)}</p></div><small>Reported by ${escapeHtml((item.reported_by || []).map(displayPersonName).join(", ") || "Unknown")}${item.source === "carryover" ? `<br><b>Carryover from ${escapeHtml(item.source_date || "prior day")}</b>` : ""}</small></li>`).join("")}</ul>` : `<p class="analysis-empty">${escapeHtml(emptyText)}</p>`}</section>`;
 }
 
 function renderDailySummary(value) {
@@ -48,7 +48,7 @@ function renderDailySummary(value) {
     <section class="analysis-overview"><h3>Executive summary</h3><p>${escapeHtml(analysis.executive_summary || "No overall conclusion was available.")}</p></section>
     ${renderAnalysisItems("Work completed", analysis.completed_work, "No completed work was reported.")}
     ${renderAnalysisItems("Blockers and delays", analysis.blockers_and_delays, "No blockers or delays were reported.")}
-    ${renderAnalysisItems("Tomorrow's plan", analysis.tomorrow_plan, "No work for tomorrow was reported.")}
+    ${renderAnalysisItems("Tomorrow's plan and open tasks", analysis.tomorrow_plan, "No work for tomorrow or open tasks were reported.")}
     ${renderAnalysisItems("Labor", analysis.labor, "No labor details were reported.")}
     ${renderAnalysisItems("Inspections", analysis.inspections, "No inspections were reported.")}
     ${renderAnalysisItems("Materials needed", analysis.materials_needed, "No material needs were reported.")}
@@ -227,6 +227,25 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     return data;
   }
 
+  async function loadPriorOpenTasks() {
+    const { data, error } = await supabase.from("daily_report_summaries")
+      .select("report_date,english_summary")
+      .eq("company_id", companyId)
+      .lt("report_date", filterDate.value)
+      .order("report_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) return [];
+    const previous = parseDailySummary(data.english_summary);
+    return (Array.isArray(previous?.tomorrow_plan) ? previous.tomorrow_plan : []).map((item, index) => ({
+      project: item.project || "General",
+      details: item.details,
+      reported_by: item.reported_by || [],
+      source_date: item.source_date || data.report_date,
+      carryover_id: item.carryover_id || `${data.report_date}:${index}`,
+    })).filter((item) => item.details);
+  }
+
   async function loadProjects() {
     const { data } = await supabase.from("projects").select("id,name,address").eq("company_id", companyId).order("address");
     projects = data || [];
@@ -292,7 +311,8 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     if (!reports.length) return;
     summaryButton.disabled = true; summaryButton.textContent = "Analyzing reports...";
     try {
-      const data = await callAi({ action: "summarize", reports: reports.map((r) => ({ submitted_by: r.reporter_name, project: projects.find((p) => p.id === r.project_id)?.name || "General", report: r.english_text, structured_report: parseStructuredReport(r.english_summary) })) });
+      const priorOpenTasks = await loadPriorOpenTasks();
+      const data = await callAi({ action: "summarize", report_date: filterDate.value, prior_open_tasks: priorOpenTasks, reports: reports.map((r) => ({ report_date: r.report_date, submitted_by: r.reporter_name, project: projects.find((p) => p.id === r.project_id)?.name || "General", report: r.english_text, structured_report: parseStructuredReport(r.english_summary) })) });
       const { error } = await supabase.from("daily_report_summaries").upsert({ company_id: companyId, report_date: filterDate.value, english_summary: data.english_summary, generated_by: session.user.id, updated_at: new Date().toISOString() }, { onConflict: "company_id,report_date" });
       if (error) throw error; await loadReports();
     } catch (error) { message.textContent = error.message || "The summary could not be created."; message.hidden = false; }
