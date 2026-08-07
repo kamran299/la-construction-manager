@@ -22,11 +22,12 @@ Configure these environment variables in Netlify:
 
 - `SUPABASE_URL`
 - `SUPABASE_PUBLISHABLE_KEY`
+- `GOOGLE_MAPS_API_KEY`
 
-The publishable key is intentionally returned to the browser. Never expose a Supabase service-role key.
+The Supabase publishable key and website-restricted Google Maps key are intentionally returned to the browser. Never expose a Supabase service-role key, and restrict the Google key to the deployed website.
 
 ## Current scope
 
-Implemented: responsive login UI, client-side validation, password visibility control, persisted Supabase authentication, loading state, safe user-facing errors, authenticated dashboard, company and role summary, project count, and sign out.
+Implemented: responsive login UI, client-side validation, persisted Supabase authentication, authenticated dashboard, company and role summary, project creation, construction phase progress, US address autocomplete, and sign out.
 
-Deferred: account creation, password recovery, onboarding, project management, reports, time clock, approvals, and user management.
+Deferred: account creation, password recovery, onboarding, reports, time clock, approvals, and user management.

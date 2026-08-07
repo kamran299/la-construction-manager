@@ -1,3 +1,5 @@
+import { enableAddressAutocomplete } from "../services/google-maps.js";
+
 const DEFAULT_PHASES = [
   "Preconstruction", "Foundation", "Framing", "MEP Rough-in",
   "Insulation & Drywall", "Finishes", "Final Inspection", "Closeout",
@@ -15,6 +17,7 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
   const navItems = document.querySelectorAll(".nav-item");
   const list = document.querySelector("#projectsList");
   const form = document.querySelector("#projectForm");
+  const addressInput = document.querySelector("#projectAddress");
   const message = document.querySelector("#projectsMessage");
 
   function navigate(showProjects) {
@@ -68,7 +71,7 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
     event.preventDefault();
     message.hidden = true;
     const name = document.querySelector("#projectName").value.trim();
-    const address = document.querySelector("#projectAddress").value.trim();
+    const address = addressInput.value.trim();
     if (!name || !canManage) return;
     const { data: project, error } = await supabase.from("projects").insert({ company_id: companyId, name, address }).select().single();
     if (error) return showError("The project could not be created.");
@@ -82,5 +85,8 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
   document.querySelector("#projectsNav").addEventListener("click", (event) => { event.preventDefault(); navigate(true); });
   document.querySelector("#backToDashboard").addEventListener("click", () => navigate(false));
   if (!canManage) document.querySelector(".project-form-card").hidden = true;
+  else enableAddressAutocomplete(addressInput).catch(() => {
+    addressInput.placeholder = "Enter the full project address";
+  });
   return { loadProjects };
 }
