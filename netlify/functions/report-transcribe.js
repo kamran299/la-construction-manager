@@ -11,7 +11,7 @@ async function transcribe(openaiKey, audio, model) {
   const body = new FormData();
   body.append("file", audio, audio.name || "persian-report.webm");
   body.append("model", model);
-  body.append("prompt", "A Persian or English daily construction field report containing project names, addresses, trade work, materials, safety notes, delays, and next steps. Preserve construction terminology accurately.");
+  body.append("prompt", "A Persian or English daily construction field report containing project names, addresses, trade work, materials, safety notes, delays, and next steps. Company vocabulary: Poly (پُلی/پلی) is a person's name and must be written as Poly; subfloor (ساب فلور/ساب‌فلور) is the construction term subfloor and must never be changed to scaffolding; تراک کانکریت means a truckload of concrete. Preserve names, quantities, times, and construction terminology accurately.");
   return fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
     headers: { authorization: `Bearer ${openaiKey}` },
