@@ -46,12 +46,22 @@
 .project-card h2 { margin: 0 0 5px; font-size: 1.15rem; }
 .project-address { color: var(--slate-500); font-size: .86rem; }
 .overall-progress { flex: 0 0 auto; color: var(--orange-600); font-size: 1.35rem; font-weight: 900; }
-.phase-list { display: grid; gap: 13px; margin-top: 22px; padding-top: 20px; border-top: 1px solid #eaecf0; }
-.phase-row { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(160px, 2fr) 48px; gap: 14px; align-items: center; }
-.phase-row label { color: var(--slate-700); font-size: .82rem; font-weight: 700; }
-.phase-row input[type="range"] { width: 100%; accent-color: var(--orange-600); }
-.phase-value { color: var(--slate-700); font-size: .82rem; font-weight: 800; text-align: right; }
+.phase-list { display: grid; gap: 10px; margin-top: 22px; padding-top: 20px; border-top: 1px solid #eaecf0; }
+.phase-group { overflow: hidden; border: 1px solid #eaecf0; border-radius: 12px; background: #fbfcfd; }
+.phase-group summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; cursor: pointer; color: var(--slate-700); font-size: .86rem; font-weight: 800; }
+.phase-summary-progress { display: grid; grid-template-columns: 110px 42px; gap: 10px; align-items: center; }
+.phase-summary-progress i { height: 7px; overflow: hidden; border-radius: 99px; background: linear-gradient(to right, var(--orange-600) var(--progress), #e5e7eb var(--progress)); }
+.phase-summary-progress strong { font-size: .78rem; text-align: right; }
+.task-list { display: grid; border-top: 1px solid #eaecf0; background: var(--white); }
+.task-row { display: grid; grid-template-columns: minmax(220px, 1.6fr) minmax(140px, 1fr) 44px; gap: 14px; align-items: center; padding: 13px 16px; border-bottom: 1px solid #f0f2f5; }
+.task-row:last-child { border-bottom: 0; }
+.task-info strong, .task-info span { display: block; }
+.task-info strong { color: var(--slate-700); font-size: .8rem; }
+.task-info span { margin-top: 4px; color: var(--slate-500); font-size: .7rem; }
+.task-row input[type="range"] { width: 100%; accent-color: var(--orange-600); }
+.task-value { color: var(--slate-700); font-size: .78rem; font-weight: 800; text-align: right; }
+.no-tasks { margin: 0; padding: 16px; color: var(--slate-500); font-size: .78rem; }
 .empty-projects { padding: 48px 24px; border: 1px dashed var(--slate-300); border-radius: 16px; color: var(--slate-500); text-align: center; }
 @media (max-width: 900px) { .sidebar { position: static; width: 100%; height: auto; flex-direction: row; align-items: center; padding: 14px 20px; } .sidebar-brand { padding: 0; } .sidebar-brand > div:last-child, .sidebar-account, .sidebar nav { display: none; } .dashboard-content { margin-left: 0; padding: 28px 20px; } }
 @media (max-width: 760px) { .projects-grid { grid-template-columns: 1fr; } .project-form-card { position: static; } }
-@media (max-width: 680px) { .dashboard-header { align-items: flex-start; } .metric-grid { grid-template-columns: 1fr; } .welcome-card { flex-direction: column; } .metric-card { min-height: 140px; } .phase-row { grid-template-columns: 1fr 48px; } .phase-row input { grid-column: 1 / -1; grid-row: 2; } }
+@media (max-width: 680px) { .dashboard-header { align-items: flex-start; } .metric-grid { grid-template-columns: 1fr; } .welcome-card { flex-direction: column; } .metric-card { min-height: 140px; } .phase-summary-progress { grid-template-columns: 70px 40px; } .task-row { grid-template-columns: 1fr 44px; } .task-row input { grid-column: 1 / -1; grid-row: 2; } }

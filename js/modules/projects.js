@@ -1,9 +1,5 @@
 import { enableAddressAutocomplete } from "../services/google-maps.js";
-
-const DEFAULT_PHASES = [
-  "Preconstruction", "Foundation", "Framing", "MEP Rough-in",
-  "Insulation & Drywall", "Finishes", "Final Inspection", "Closeout",
-];
+import { DEFAULT_PHASES, buildProjectTasks } from "../data/construction-template.js";
 
 function escapeHtml(value) {
   return String(value || "").replace(/[&<>"']/g, (character) => ({
@@ -19,6 +15,7 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
   const form = document.querySelector("#projectForm");
   const addressInput = document.querySelector("#projectAddress");
   const message = document.querySelector("#projectsMessage");
+  let isRepairingTasks = false;
 
   function navigate(showProjects) {
     dashboardContent.hidden = showProjects;
@@ -34,12 +31,25 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
   async function loadProjects() {
     const { data, error } = await supabase
       .from("projects")
-      .select("*, project_phases(*)")
+      .select("*, project_phases(*, project_tasks(*))")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
     if (error) return showError("Projects could not be loaded.");
-    render(data || []);
-    onCountChange(data?.length || 0);
+    const projects = data || [];
+    if (canManage && !isRepairingTasks) {
+      const missingTasks = projects.flatMap((project) => buildProjectTasks(
+        (project.project_phases || []).filter((phase) => !(phase.project_tasks || []).length),
+      ));
+      if (missingTasks.length) {
+        isRepairingTasks = true;
+        const { error: repairError } = await supabase.from("project_tasks").insert(missingTasks);
+        isRepairingTasks = false;
+        if (repairError) return showError("Detailed construction tasks could not be added.");
+        return loadProjects();
+      }
+    }
+    render(projects);
+    onCountChange(projects.length);
   }
 
   function render(projects) {
@@ -51,19 +61,25 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
       const phases = [...(project.project_phases || [])].sort((a, b) => a.sort_order - b.sort_order);
       return `<article class="project-card">
         <div class="project-card-header"><div><h2>${escapeHtml(project.name)}</h2><div class="project-address">${escapeHtml(project.address || "No address")}</div></div><div class="overall-progress">${project.progress_percent}%</div></div>
-        <div class="phase-list">${phases.map((phase) => `<div class="phase-row">
-          <label for="phase-${phase.id}">${escapeHtml(phase.name)}</label>
-          <input id="phase-${phase.id}" type="range" min="0" max="100" step="5" value="${phase.progress_percent}" data-phase-id="${phase.id}" ${canManage ? "" : "disabled"}>
-          <span class="phase-value">${phase.progress_percent}%</span>
-        </div>`).join("")}</div>
+        <div class="phase-list">${phases.map((phase) => {
+          const tasks = [...(phase.project_tasks || [])].sort((a, b) => a.sort_order - b.sort_order);
+          return `<details class="phase-group">
+            <summary><span>${escapeHtml(phase.name)}</span><span class="phase-summary-progress"><i style="--progress:${phase.progress_percent}%"></i><strong>${phase.progress_percent}%</strong></span></summary>
+            <div class="task-list">${tasks.length ? tasks.map((task) => `<div class="task-row">
+              <div class="task-info"><strong>${escapeHtml(task.name)}</strong><span>${escapeHtml(task.responsible_trade)} · Typical ${task.duration_days} ${task.duration_days === 1 ? "day" : "days"}</span></div>
+              <input type="range" min="0" max="100" step="5" value="${task.progress_percent}" data-task-id="${task.id}" aria-label="${escapeHtml(task.name)} progress" ${canManage ? "" : "disabled"}>
+              <span class="task-value">${task.progress_percent}%</span>
+            </div>`).join("") : '<p class="no-tasks">Detailed tasks must be added to this phase.</p>'}</div>
+          </details>`;
+        }).join("")}</div>
       </article>`;
     }).join("");
 
-    list.querySelectorAll("input[type=range]").forEach((input) => {
+    list.querySelectorAll("input[data-task-id]").forEach((input) => {
       input.addEventListener("input", () => { input.nextElementSibling.textContent = `${input.value}%`; });
       input.addEventListener("change", async () => {
-        const { error } = await supabase.from("project_phases").update({ progress_percent: Number(input.value) }).eq("id", input.dataset.phaseId);
-        if (error) showError("Phase progress could not be saved."); else loadProjects();
+        const { error } = await supabase.from("project_tasks").update({ progress_percent: Number(input.value) }).eq("id", input.dataset.taskId);
+        if (error) showError("Task progress could not be saved."); else loadProjects();
       });
     });
   }
@@ -79,8 +95,10 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
     const { data: project, error } = await supabase.from("projects").insert({ company_id: companyId, name, address }).select().single();
     if (error) return showError("The project could not be created.");
     const phases = DEFAULT_PHASES.map((phaseName, index) => ({ project_id: project.id, name: phaseName, sort_order: index + 1, weight: 1 }));
-    const { error: phaseError } = await supabase.from("project_phases").insert(phases);
+    const { data: createdPhases, error: phaseError } = await supabase.from("project_phases").insert(phases).select("id, name");
     if (phaseError) return showError("The project was created, but its phases could not be added.");
+    const { error: taskError } = await supabase.from("project_tasks").insert(buildProjectTasks(createdPhases || []));
+    if (taskError) return showError("The phases were created, but their detailed tasks could not be added.");
     form.reset();
     loadProjects();
   });
