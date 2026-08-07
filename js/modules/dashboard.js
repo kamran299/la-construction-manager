@@ -1,4 +1,6 @@
 import { createProjectsModule } from "./projects.js";
+import { createReportsModule } from "./reports.js";
+import { createTeamModule } from "./team.js";
 
 const ROLE_NAMES = {
   owner_admin: "Owner / Admin",
@@ -65,10 +67,31 @@ export async function showDashboard({ supabase, session }) {
     .eq("company_id", membership.companies.id);
 
   document.querySelector("#projectCount").textContent = projectError ? "—" : String(count ?? 0);
-  createProjectsModule({
+  const views = {
+    dashboard: document.querySelector("#dashboardView > .dashboard-content"),
+    projects: document.querySelector("#projectsView"),
+    reports: document.querySelector("#reportsView"),
+    team: document.querySelector("#teamView"),
+  };
+  const modules = {};
+  function navigate(name) {
+    Object.entries(views).forEach(([key, view]) => { view.hidden = key !== name; });
+    document.querySelectorAll(".nav-item").forEach((item) => {
+      const active = item.getAttribute("href") === `#${name}`;
+      item.classList.toggle("is-active", active);
+      item.toggleAttribute("aria-current", active);
+    });
+    modules[name]?.load?.();
+  }
+  modules.projects = createProjectsModule({
     supabase,
     companyId: membership.companies.id,
     canManage: ["owner_admin", "project_manager"].includes(membership.role),
     onCountChange: (nextCount) => { document.querySelector("#projectCount").textContent = String(nextCount); },
+    onNavigate: navigate,
   });
+  modules.reports = createReportsModule({ supabase, session, companyId: membership.companies.id, membership, canManage: ["owner_admin", "project_manager"].includes(membership.role) });
+  modules.team = createTeamModule({ supabase, session, companyId: membership.companies.id, canManage: ["owner_admin", "project_manager"].includes(membership.role) });
+  document.querySelectorAll(".nav-item").forEach((item) => item.addEventListener("click", (event) => { event.preventDefault(); navigate(item.getAttribute("href").slice(1)); }));
+  navigate(location.hash.slice(1) in views ? location.hash.slice(1) : "dashboard");
 }

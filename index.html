@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/login.css">
     <link rel="stylesheet" href="/css/dashboard.css">
-    <script type="module" src="/js/app.js?v=20260806-2"></script>
+    <script type="module" src="/js/app.js?v=20260806-3"></script>
   </head>
   <body>
     <main id="loginView" class="login-layout">
@@ -72,6 +72,12 @@
           </a>
           <a id="projectsNav" class="nav-item" href="#projects">
             <span aria-hidden="true">▦</span> Projects
+          </a>
+          <a id="reportsNav" class="nav-item" href="#reports">
+            <span aria-hidden="true">≡</span> Reports
+          </a>
+          <a id="teamNav" class="nav-item" href="#team">
+            <span aria-hidden="true">♙</span> Users
           </a>
         </nav>
         <div class="sidebar-account">
@@ -146,6 +152,45 @@
           <section>
             <div id="projectsList" class="projects-list"></div>
           </section>
+        </div>
+      </section>
+
+      <section id="reportsView" class="dashboard-content" aria-labelledby="reportsTitle" hidden>
+        <header class="dashboard-header"><div><p class="eyebrow">Daily field reports</p><h1 id="reportsTitle">Reports</h1></div></header>
+        <div id="reportsMessage" class="message" role="status" hidden></div>
+        <div class="reports-layout">
+          <section class="workspace-card report-form-card">
+            <h2>New daily report</h2>
+            <p>Write naturally in Persian. The original and English version will both be saved.</p>
+            <form id="reportForm">
+              <label for="reportDate">Work date</label><input id="reportDate" type="date" required>
+              <label for="reportProject">Project</label><select id="reportProject"><option value="">General / no project</option></select>
+              <label for="reportText">گزارش فارسی</label><textarea id="reportText" dir="rtl" lang="fa" rows="8" placeholder="امروز چه کارهایی انجام شد؟ مشکل یا تأخیری وجود داشت؟" required></textarea>
+              <button id="submitReportButton" class="primary-button" type="submit">Translate &amp; save report</button>
+            </form>
+          </section>
+          <section class="reports-column">
+            <div class="report-toolbar workspace-card"><label for="reportsDateFilter">Reports for</label><input id="reportsDateFilter" type="date"><button id="summarizeReportsButton" class="secondary-button" type="button">Create end-of-day summary</button></div>
+            <article id="dailySummary" class="workspace-card daily-summary" hidden></article>
+            <div id="reportsList" class="reports-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="teamView" class="dashboard-content" aria-labelledby="teamTitle" hidden>
+        <header class="dashboard-header"><div><p class="eyebrow">Company access</p><h1 id="teamTitle">Users</h1></div></header>
+        <div id="teamMessage" class="message" role="status" hidden></div>
+        <div class="team-layout">
+          <section id="inviteCard" class="workspace-card">
+            <h2>Add user</h2><p>An invitation email will be sent to the new user.</p>
+            <form id="inviteForm">
+              <label for="inviteName">Full name</label><input id="inviteName" required>
+              <label for="inviteEmail">Work email</label><input id="inviteEmail" type="email" required>
+              <label for="inviteRole">Role</label><select id="inviteRole"><option value="project_manager">Project Manager</option><option value="foreman_employee">Foreman / Employee</option><option value="viewer">Viewer</option></select>
+              <button id="inviteButton" class="primary-button" type="submit">Send invitation</button>
+            </form>
+          </section>
+          <section><div id="teamList" class="team-list"></div></section>
         </div>
       </section>
     </main>

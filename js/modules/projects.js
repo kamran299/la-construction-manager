@@ -29,10 +29,8 @@ function renderFileRows(files, canManage) {
   </div>`).join("");
 }
 
-export function createProjectsModule({ supabase, companyId, canManage, onCountChange }) {
-  const dashboardContent = document.querySelector("#dashboardView > .dashboard-content");
+export function createProjectsModule({ supabase, companyId, canManage, onCountChange, onNavigate }) {
   const projectsView = document.querySelector("#projectsView");
-  const navItems = document.querySelectorAll(".nav-item");
   const list = document.querySelector("#projectsList");
   const form = document.querySelector("#projectForm");
   const addressInput = document.querySelector("#projectAddress");
@@ -44,20 +42,6 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
   let isRepairingTasks = false;
   let loadedProjects = [];
   let selectedProjectId = null;
-
-  function navigate(showProjects) {
-    dashboardContent.hidden = showProjects;
-    projectsView.hidden = !showProjects;
-    navItems.forEach((item) => item.classList.toggle("is-active", item.id === (showProjects ? "projectsNav" : "")));
-    const dashboardNav = document.querySelector('.nav-item[href="#dashboard"]');
-    dashboardNav.classList.toggle("is-active", !showProjects);
-    dashboardNav.toggleAttribute("aria-current", !showProjects);
-    document.querySelector("#projectsNav").toggleAttribute("aria-current", showProjects);
-    if (showProjects) {
-      selectedProjectId = null;
-      loadProjects();
-    }
-  }
 
   async function loadProjects() {
     const { data, error } = await supabase
@@ -264,14 +248,12 @@ export function createProjectsModule({ supabase, companyId, canManage, onCountCh
     loadProjects();
   });
 
-  document.querySelector("#projectsNav").addEventListener("click", (event) => { event.preventDefault(); navigate(true); });
-  document.querySelector('.nav-item[href="#dashboard"]').addEventListener("click", (event) => { event.preventDefault(); navigate(false); });
   backButton.addEventListener("click", () => {
-    if (selectedProjectId) showProjectList(); else navigate(false);
+    if (selectedProjectId) showProjectList(); else onNavigate("dashboard");
   });
   if (!canManage) document.querySelector(".project-form-card").hidden = true;
   else enableAddressAutocomplete(addressInput).catch(() => {
     addressInput.placeholder = "Enter the full project address";
   });
-  return { loadProjects };
+  return { load: () => { selectedProjectId = null; return loadProjects(); } };
 }
