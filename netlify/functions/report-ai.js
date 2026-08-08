@@ -2,6 +2,8 @@ function json(statusCode, body) {
   return new Response(JSON.stringify(body), { status: statusCode, headers: { "content-type": "application/json" } });
 }
 
+const REPORT_AI_VERSION = "2026-08-07-evidence-v1";
+
 async function verifyUser(token, supabaseUrl, publicKey) {
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: publicKey, authorization: `Bearer ${token}` } });
   return response.ok ? response.json() : null;
@@ -124,6 +126,7 @@ Standard terms include excavation, grading, compaction, trench, backfill, layout
 Persian speakers frequently pronounce these as English loanwords; translate them to the matching standard English construction term. Preserve all people, company and project names, addresses, dates, times, measurements and quantities exactly. If an unfamiliar word may be a name or specialized term, transliterate it instead of inventing or substituting an unrelated item.`;
 
 export default async (request) => {
+  if (request.method === "GET") return json(200, { service: "report-ai", version: REPORT_AI_VERSION });
   if (request.method !== "POST") return json(405, { error: "Method not allowed" });
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   const supabaseUrl = Netlify.env.get("SUPABASE_URL");
@@ -193,14 +196,14 @@ Use an empty array for every category not explicitly mentioned.`;
   if (isSummary) {
     try {
       const dailySummary = sanitizeSummary(parseModelJson(text), body.prior_open_tasks || [], body.reports || []);
-      return json(200, { daily_summary: dailySummary, english_summary: JSON.stringify(dailySummary) });
+      return json(200, { daily_summary: dailySummary, english_summary: JSON.stringify(dailySummary), processing_version: REPORT_AI_VERSION });
     } catch {
       return json(502, { error: "The daily analysis could not be structured. Please try again." });
     }
   }
   try {
     const report = sanitizeReport(parseModelJson(text));
-    return json(200, { ...report, structured_report: report });
+    return json(200, { ...report, structured_report: report, processing_version: REPORT_AI_VERSION });
   } catch {
     return json(502, { error: "The AI report could not be structured. Please try again." });
   }
