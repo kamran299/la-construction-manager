@@ -43,14 +43,28 @@ function splitMixedDisplayFacts(item) {
   return [details.slice(0, materialStart), details.slice(materialStart)]
     .map((part) => part.trim().replace(/[;,]+$/, ""))
     .filter(Boolean)
-    .map((part) => ({ ...item, details: part }));
+    .map((part) => ({ ...item, details: part.charAt(0).toUpperCase() + part.slice(1) }));
+}
+
+function dedupeInspectionsForDisplay(items) {
+  const unique = new Map();
+  items.forEach((item) => {
+    const details = String(item?.details || "").trim();
+    const time = details.match(/\b\d{1,2}:\d{2}\s*(?:AM|PM)\b/i)?.[0].toLowerCase();
+    const key = time
+      ? `${String(item?.project || "General").toLowerCase()}::inspection-time:${time}`
+      : `${String(item?.project || "General").toLowerCase()}::${details.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()}`;
+    const existing = unique.get(key);
+    if (!existing || details.length > String(existing.details || "").length) unique.set(key, item);
+  });
+  return [...unique.values()];
 }
 
 function sanitizeAnalysisForDisplay(analysis) {
   return {
     ...analysis,
     completed_work: (Array.isArray(analysis.completed_work) ? analysis.completed_work : []).flatMap(splitMixedDisplayFacts),
-    inspections: (Array.isArray(analysis.inspections) ? analysis.inspections : []).flatMap(splitMixedDisplayFacts).filter((item) => DISPLAY_INSPECTION.test(String(item.details || ""))),
+    inspections: dedupeInspectionsForDisplay((Array.isArray(analysis.inspections) ? analysis.inspections : []).flatMap(splitMixedDisplayFacts).filter((item) => DISPLAY_INSPECTION.test(String(item.details || "")))),
     labor: (Array.isArray(analysis.labor) ? analysis.labor : []).filter((item) => !DISPLAY_FUTURE_LABOR.test(`${item?.details || ""} ${item?.evidence || ""}`)),
     materials_needed: dedupeMaterialsForDisplay(analysis.materials_needed),
   };
