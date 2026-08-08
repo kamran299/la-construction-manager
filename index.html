@@ -76,6 +76,9 @@
           <a id="reportsNav" class="nav-item" href="#reports">
             <span aria-hidden="true">≡</span> Reports
           </a>
+          <a id="tasksNav" class="nav-item" href="#tasks">
+            <span aria-hidden="true">✓</span> Tasks
+          </a>
           <a id="teamNav" class="nav-item" href="#team">
             <span aria-hidden="true">♙</span> Users
           </a>
@@ -196,6 +199,21 @@
             <div id="reportsList" class="reports-list"></div>
           </section>
         </div>
+      </section>
+
+      <section id="tasksView" class="dashboard-content" aria-labelledby="tasksTitle" hidden>
+        <header class="dashboard-header"><div><p class="eyebrow">From all daily reports</p><h1 id="tasksTitle">Tasks</h1></div></header>
+        <div id="tasksMessage" class="message message-error" role="alert" hidden></div>
+        <section class="task-metric-grid" aria-label="Task overview">
+          <article><span>Open work</span><strong id="openTaskCount">0</strong></article>
+          <article><span>Materials to order</span><strong id="materialTaskCount">0</strong></article>
+          <article><span>Completed carryovers</span><strong id="completedTaskCount">0</strong></article>
+        </section>
+        <div class="ai-tasks-layout">
+          <section class="workspace-card ai-task-section"><header><p class="eyebrow">Action list</p><h2>Work to do</h2></header><div id="openTasksList" class="ai-task-list"></div></section>
+          <section class="workspace-card ai-task-section materials-section"><header><p class="eyebrow">Purchasing</p><h2>Materials to order</h2></header><div id="materialTasksList" class="ai-task-list"></div></section>
+        </div>
+        <details class="workspace-card completed-task-section"><summary>Completed tasks from later reports</summary><div id="completedTasksList" class="ai-task-list"></div></details>
       </section>
 
       <section id="teamView" class="dashboard-content" aria-labelledby="teamTitle" hidden>

@@ -1,6 +1,7 @@
 import { createProjectsModule } from "./projects.js";
 import { createReportsModule } from "./reports.js";
 import { createTeamModule } from "./team.js";
+import { createTasksModule } from "./tasks.js";
 
 const ROLE_NAMES = {
   owner_admin: "Owner / Admin",
@@ -71,6 +72,7 @@ export async function showDashboard({ supabase, session }) {
     dashboard: document.querySelector("#dashboardView > .dashboard-content"),
     projects: document.querySelector("#projectsView"),
     reports: document.querySelector("#reportsView"),
+    tasks: document.querySelector("#tasksView"),
     team: document.querySelector("#teamView"),
   };
   const modules = {};
@@ -92,6 +94,7 @@ export async function showDashboard({ supabase, session }) {
     onNavigate: navigate,
   });
   modules.reports = createReportsModule({ supabase, session, companyId: membership.companies.id, membership, canManage: ["owner_admin", "project_manager"].includes(membership.role) });
+  modules.tasks = createTasksModule({ supabase, companyId: membership.companies.id });
   modules.team = createTeamModule({ supabase, session, companyId: membership.companies.id, canManage: ["owner_admin", "project_manager"].includes(membership.role) });
   document.querySelectorAll(".nav-item").forEach((item) => item.addEventListener("click", (event) => { event.preventDefault(); navigate(item.getAttribute("href").slice(1)); }));
   navigate(location.hash.slice(1) in views ? location.hash.slice(1) : "dashboard");
