@@ -22,6 +22,21 @@ const COMPLETION_EVIDENCE = /\b(completed?|finished|done|resolved|installed|deli
 const MATERIAL_ACTION = /\b(order(?:ed|ing)?|buy|purchase(?:d|ing)?|procure(?:d|ment|ing)?|source|material(?:s)?\s+(?:needed|required|missing|insufficient))\b/i;
 const MATERIAL_ALREADY_AVAILABLE = /\b(delivered|received|purchased|bought|available|on[- ]?site|awaiting (?:pickup|installation)|waiting (?:for )?(?:pickup|installation))\b/i;
 const LABOR_NOT_YET_PERFORMED = /\b(will|scheduled|plans? to|pending|to (?:pick|deliver|install|start|begin|return|come|reinstall))\b/i;
+const INSPECTION_EVIDENCE = /\b(inspect(?:ion|or|ed|ing)?|correction notice|sign[- ]?off)\b/i;
+const EXPLICIT_RISK = /\b(noise complaint|complaint.{0,30}noise|not wearing (?:helmets?|vests?|ppe)|without (?:helmets?|vests?|ppe)|safety (?:violation|hazard|concern|issue)|unsafe|injur(?:y|ed)|accident)\b/i;
+
+function inspectionKey(item) {
+  const text = `${item?.details || ""} ${item?.evidence || ""}`.toLowerCase();
+  const trade = text.match(/\b(plumbing|electrical|drywall|sheetrock|duct|exhaust|framing|foundation|rebar|concrete|soil|compaction|roofing|insulation|fire|hvac)\b/)?.[0] || "general";
+  const status = text.match(/\b(passed|failed|conducted|completed|requested|scheduled|return|follow[- ]?up|recheck)\b/)?.[0] || "noted";
+  return `${String(item?.project || "General").toLowerCase()}::${trade}::${status}`;
+}
+
+function riskKey(item) {
+  const text = `${item?.details || ""} ${item?.evidence || ""}`.toLowerCase();
+  const type = text.includes("noise") ? "noise" : /helmet|vest|ppe/.test(text) ? "ppe" : /injur/.test(text) ? "injury" : text.includes("accident") ? "accident" : "safety";
+  return `${String(item?.project || "General").toLowerCase()}::${type}`;
+}
 
 function materialKey(value) {
   const ignored = new Set(["a", "an", "the", "to", "be", "is", "are", "was", "were", "must", "should", "for", "material", "materials", "need", "needed", "needs", "require", "required", "missing", "insufficient", "order", "ordered", "ordering", "buy", "purchase", "purchased", "purchasing", "procure", "procured", "procurement", "procuring", "source"]);
@@ -46,8 +61,14 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
     return clauses.length ? [{ ...item, details: clauses.join(" ") }] : [];
   });
   const inspections = (Array.isArray(summary.inspections) ? summary.inspections : []).filter((item) =>
-    /\b(inspect(?:ion|or|ed|ing)?|correction notice|sign[- ]?off)\b/i.test(String(item?.evidence || ""))
+    INSPECTION_EVIDENCE.test(String(item?.evidence || ""))
   );
+  const inspectionKeys = new Set(inspections.map(inspectionKey));
+  completedWork.filter((item) => INSPECTION_EVIDENCE.test(`${item?.details || ""} ${item?.evidence || ""}`)).forEach((item) => {
+    const key = inspectionKey(item);
+    if (!inspectionKeys.has(key)) inspections.push({ ...item });
+    inspectionKeys.add(key);
+  });
   const reportText = submittedReports.map((report) => String(report?.report || "").toLowerCase()).join("\n");
   const resolvedIds = new Set((Array.isArray(summary.resolved_prior_tasks) ? summary.resolved_prior_tasks : [])
     .filter((item) => item?.carryover_id && COMPLETION_EVIDENCE.test(String(item.evidence || "")) && reportText.includes(String(item.evidence || "").toLowerCase()))
@@ -68,8 +89,18 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
     !MATERIAL_ALREADY_AVAILABLE.test(String(item?.details || "")) || MATERIAL_ACTION.test(String(item?.details || ""))
   );
   const labor = (Array.isArray(summary.labor) ? summary.labor : []).filter((item) =>
-    !LABOR_NOT_YET_PERFORMED.test(String(item?.details || ""))
+    !LABOR_NOT_YET_PERFORMED.test(`${item?.details || ""} ${item?.evidence || ""}`)
   );
+  const risks = Array.isArray(summary.risks) ? [...summary.risks] : [];
+  const riskKeys = new Set(risks.map(riskKey));
+  submittedReports.forEach((report) => {
+    String(report?.report || "").split(/(?<=[.!?])\s+|[;\n]+/).map((part) => part.trim()).filter((part) => part && EXPLICIT_RISK.test(part)).forEach((evidence) => {
+      const item = { project: report.project || "General", details: evidence, reported_by: [report.submitted_by].filter(Boolean), evidence };
+      const key = riskKey(item);
+      if (!riskKeys.has(key)) risks.push(item);
+      riskKeys.add(key);
+    });
+  });
   finalTomorrowPlan.filter((item) => MATERIAL_ACTION.test(String(item?.details || ""))).forEach((item) => {
     const project = String(item.project || "General").toLowerCase();
     const key = materialKey(item.details);
@@ -83,7 +114,7 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
     }
     materialsNeeded.push({ ...item, evidence: item.evidence || item.details });
   });
-  return { ...summary, completed_work: completedWork, inspections, tomorrow_plan: finalTomorrowPlan, labor, materials_needed: materialsNeeded };
+  return { ...summary, completed_work: completedWork, inspections, tomorrow_plan: finalTomorrowPlan, labor, materials_needed: materialsNeeded, risks };
 }
 
 const CONSTRUCTION_GLOSSARY = `
