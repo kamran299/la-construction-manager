@@ -32,6 +32,30 @@ function dedupeMaterialsForDisplay(items) {
   return [...unique.values()];
 }
 
+const DISPLAY_INSPECTION = /\b(inspect(?:ion|or|ed|ing)?|correction notice|sign[- ]?off)\b/i;
+const DISPLAY_FUTURE_LABOR = /\b(will|scheduled|plans? to|pending|responsible for|to (?:pick|deliver|install|start|begin|return|come|reinstall))\b/i;
+
+function splitMixedDisplayFacts(item) {
+  const details = String(item?.details || "").trim();
+  if (!DISPLAY_INSPECTION.test(details)) return details ? [{ ...item, details }] : [];
+  const materialStart = details.search(/\b(?:purchased|bought|delivered|received)\b/i);
+  if (materialStart <= 0) return details ? [{ ...item, details }] : [];
+  return [details.slice(0, materialStart), details.slice(materialStart)]
+    .map((part) => part.trim().replace(/[;,]+$/, ""))
+    .filter(Boolean)
+    .map((part) => ({ ...item, details: part }));
+}
+
+function sanitizeAnalysisForDisplay(analysis) {
+  return {
+    ...analysis,
+    completed_work: (Array.isArray(analysis.completed_work) ? analysis.completed_work : []).flatMap(splitMixedDisplayFacts),
+    inspections: (Array.isArray(analysis.inspections) ? analysis.inspections : []).flatMap(splitMixedDisplayFacts).filter((item) => DISPLAY_INSPECTION.test(String(item.details || ""))),
+    labor: (Array.isArray(analysis.labor) ? analysis.labor : []).filter((item) => !DISPLAY_FUTURE_LABOR.test(`${item?.details || ""} ${item?.evidence || ""}`)),
+    materials_needed: dedupeMaterialsForDisplay(analysis.materials_needed),
+  };
+}
+
 function renderReportItems(title, items) {
   const rows = Array.isArray(items) ? items.filter(Boolean) : [];
   if (!rows.length) return "";
@@ -59,7 +83,7 @@ function renderAnalysisItems(title, items, emptyText) {
 function renderDailySummary(value) {
   const parsedAnalysis = parseDailySummary(value);
   if (!parsedAnalysis) return `<h2>End-of-day summary</h2><p>${escapeHtml(value)}</p>`;
-  const analysis = { ...parsedAnalysis, materials_needed: dedupeMaterialsForDisplay(parsedAnalysis.materials_needed) };
+  const analysis = sanitizeAnalysisForDisplay(parsedAnalysis);
   const contributors = Array.isArray(analysis.contributors) ? analysis.contributors : [];
   return `<header class="analysis-header"><div><span>AI DAILY ANALYSIS</span><h2>End-of-day management report</h2></div><strong>${contributors.length} contributor${contributors.length === 1 ? "" : "s"}</strong></header>
     <section class="analysis-overview"><h3>Executive summary</h3><p>${escapeHtml(analysis.executive_summary || "No overall conclusion was available.")}</p></section>
