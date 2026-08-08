@@ -117,7 +117,6 @@ export function createReportsModule({ supabase, session, companyId, membership, 
   let microphoneStream = null;
   let audioChunks = [];
   let savedSummaryValue = "";
-  let summaryFreshForDate = "";
 
   function projectFor(report) { return projects.find((project) => project.id === report.project_id); }
 
@@ -152,7 +151,6 @@ export function createReportsModule({ supabase, session, companyId, membership, 
   function exportSummaryPdf() {
     try {
       if (!savedSummaryValue) throw new Error("Create the AI daily analysis first.");
-      if (summaryFreshForDate !== filterDate.value) throw new Error("First click Generate / refresh 5 PM summary. When it finishes, click this PDF button again.");
       openPdfPrintView({ title: "AI end-of-day analysis", subtitle: formatReportDate(filterDate.value), body: renderDailySummary(savedSummaryValue) });
     } catch (error) { showPdfError(error); }
   }
@@ -356,7 +354,6 @@ export function createReportsModule({ supabase, session, companyId, membership, 
       const data = await callAi({ action: "summarize", report_date: filterDate.value, prior_open_tasks: priorOpenTasks, reports: reports.map((r) => ({ report_date: r.report_date, submitted_by: r.reporter_name, project: projects.find((p) => p.id === r.project_id)?.name || "General", report: r.english_text, structured_report: parseStructuredReport(r.english_summary) })) });
       const { error } = await supabase.from("daily_report_summaries").upsert({ company_id: companyId, report_date: filterDate.value, english_summary: data.english_summary, generated_by: session.user.id, updated_at: new Date().toISOString() }, { onConflict: "company_id,report_date" });
       if (error) throw error;
-      summaryFreshForDate = filterDate.value;
       await loadReports();
     } catch (error) { message.textContent = error.message || "The summary could not be created."; message.hidden = false; }
     finally { summaryButton.disabled = false; summaryButton.textContent = "Generate / refresh 5 PM summary"; }
