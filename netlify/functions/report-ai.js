@@ -2,7 +2,7 @@ function json(statusCode, body) {
   return new Response(JSON.stringify(body), { status: statusCode, headers: { "content-type": "application/json" } });
 }
 
-const REPORT_AI_VERSION = "2026-08-07-evidence-v1";
+const REPORT_AI_VERSION = "2026-08-07-evidence-v2";
 
 async function verifyUser(token, supabaseUrl, publicKey) {
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: publicKey, authorization: `Bearer ${token}` } });
@@ -23,7 +23,7 @@ const INCOMPLETE_WORK = /\b(start(?:ed|ing)?|began|beginning|underway|in progres
 const COMPLETION_EVIDENCE = /\b(completed?|finished|done|resolved|installed|delivered|passed|repaired|corrected|closed)\b/i;
 const MATERIAL_ACTION = /\b(order(?:ed|ing)?|buy|purchase(?:d|ing)?|procure(?:d|ment|ing)?|source|material(?:s)?\s+(?:needed|required|missing|insufficient))\b/i;
 const MATERIAL_ALREADY_AVAILABLE = /\b(delivered|received|purchased|bought|available|on[- ]?site|awaiting (?:pickup|installation)|waiting (?:for )?(?:pickup|installation))\b/i;
-const LABOR_NOT_YET_PERFORMED = /\b(will|scheduled|plans? to|pending|to (?:pick|deliver|install|start|begin|return|come|reinstall))\b/i;
+const LABOR_NOT_YET_PERFORMED = /\b(will|scheduled|plans? to|pending|responsible for|to (?:pick|deliver|install|start|begin|return|come|reinstall))\b/i;
 const INSPECTION_EVIDENCE = /\b(inspect(?:ion|or|ed|ing)?|correction notice|sign[- ]?off)\b/i;
 const EXPLICIT_RISK = /\b(noise complaint|complaint.{0,30}noise|not wearing (?:helmets?|vests?|ppe)|without (?:helmets?|vests?|ppe)|safety (?:violation|hazard|concern|issue)|unsafe|injur(?:y|ed)|accident)\b/i;
 
@@ -52,18 +52,29 @@ function completedClauses(value) {
     .filter((part) => part && !INCOMPLETE_WORK.test(part));
 }
 
+function atomicSummaryItems(item) {
+  const details = String(item?.details || "").trim();
+  if (!INSPECTION_EVIDENCE.test(details)) return details ? [{ ...item, details }] : [];
+  const materialStart = details.search(/\b(?:purchased|bought|delivered|received)\b/i);
+  if (materialStart <= 0) return details ? [{ ...item, details }] : [];
+  return [details.slice(0, materialStart), details.slice(materialStart)]
+    .map((part) => part.trim().replace(/[;,]+$/, ""))
+    .filter(Boolean)
+    .map((part) => ({ ...item, details: part }));
+}
+
 function sanitizeReport(report) {
   const completed = (Array.isArray(report.completed) ? report.completed : []).flatMap(completedClauses);
   return { ...report, completed };
 }
 
 function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
-  const completedWork = (Array.isArray(summary.completed_work) ? summary.completed_work : []).flatMap((item) => {
+  const completedWork = (Array.isArray(summary.completed_work) ? summary.completed_work : []).flatMap(atomicSummaryItems).flatMap((item) => {
     const clauses = completedClauses(item?.details);
     return clauses.length ? [{ ...item, details: clauses.join(" ") }] : [];
   });
-  const inspections = (Array.isArray(summary.inspections) ? summary.inspections : []).filter((item) =>
-    INSPECTION_EVIDENCE.test(String(item?.evidence || ""))
+  const inspections = (Array.isArray(summary.inspections) ? summary.inspections : []).flatMap(atomicSummaryItems).filter((item) =>
+    INSPECTION_EVIDENCE.test(String(item?.evidence || "")) && INSPECTION_EVIDENCE.test(String(item?.details || ""))
   );
   const inspectionKeys = new Set(inspections.map(inspectionKey));
   completedWork.filter((item) => INSPECTION_EVIDENCE.test(`${item?.details || ""} ${item?.evidence || ""}`)).forEach((item) => {
