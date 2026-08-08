@@ -53,13 +53,21 @@ function statusOptions(selected) {
   return [["open", "Open"], ["in_progress", "In progress"], ["completed", "Completed"]].map(([value, label]) => `<option value="${value}"${selected === value ? " selected" : ""}>${label}</option>`).join("");
 }
 
-function renderTask(task, canManage) {
+function assigneeOptions(selected, members) {
+  return '<option value="">Unassigned</option>' + members.map((member) => {
+    const name = member.full_name || member.email || "Unnamed user";
+    const label = member.full_name && member.email ? `${member.full_name} (${member.email})` : name;
+    return `<option value="${escapeHtml(name)}"${selected === name ? " selected" : ""}>${escapeHtml(label)}</option>`;
+  }).join("");
+}
+
+function renderTask(task, canManage, members) {
   const status = ["open", "in_progress", "completed"].includes(task.status) ? task.status : "open";
   const reporters = task.source === "manual" ? "Added manually" : `Reported by ${(task.reported_by || []).map(displayName).join(", ") || "Not specified"}`;
   return `<article class="ai-task-card" data-task-id="${escapeHtml(task.id)}">
     <div class="ai-task-card-header"><strong>${escapeHtml(task.project)}</strong>${canManage ? `<select class="task-status-select" aria-label="Task status">${statusOptions(status)}</select>` : `<span class="task-status task-status-${status}">${status === "in_progress" ? "In progress" : status.charAt(0).toUpperCase() + status.slice(1)}</span>`}</div>
     <p>${escapeHtml(task.details)}</p>
-    ${task.assigned_to ? `<div class="task-assignee">Assigned to ${escapeHtml(task.assigned_to)}</div>` : ""}
+    ${canManage ? `<label class="task-assignee-control">Assigned to<select class="task-assignee-select">${assigneeOptions(task.assigned_to || "", members)}</select></label>` : (task.assigned_to ? `<div class="task-assignee">Assigned to ${escapeHtml(task.assigned_to)}</div>` : '<div class="task-assignee">Unassigned</div>')}
     <div class="ai-task-meta"><span>${escapeHtml(reporters)}</span><span>${task.due_date ? `Due ${escapeHtml(task.due_date)}` : `From ${escapeHtml(task.source_date || task.latest_date)}`}</span></div>
     ${task.completion_evidence ? `<small>Completion: ${escapeHtml(task.completion_evidence)}</small>` : ""}
   </article>`;
@@ -83,6 +91,7 @@ export function createTasksModule({ supabase, companyId, canManage }) {
   let tasks = [];
   let manualTasks = [];
   let taskOverrides = {};
+  let members = [];
   formCard.hidden = !canManage;
 
   function showMessage(text, isError = false) {
@@ -124,9 +133,9 @@ export function createTasksModule({ supabase, companyId, canManage }) {
     document.querySelector("#openTaskCount").textContent = String(open.length);
     document.querySelector("#materialTaskCount").textContent = String(materials.length);
     document.querySelector("#completedTaskCount").textContent = String(completed.length);
-    workList.innerHTML = sortTasks(open).map((task) => renderTask(task, canManage)).join("") || '<p class="tasks-empty">No open work tasks were found.</p>';
-    materialList.innerHTML = sortTasks(materials).map((task) => renderTask(task, canManage)).join("") || '<p class="tasks-empty">No materials need to be ordered.</p>';
-    completedList.innerHTML = sortTasks(completed).map((task) => renderTask(task, canManage)).join("") || '<p class="tasks-empty">No completed tasks were found.</p>';
+    workList.innerHTML = sortTasks(open).map((task) => renderTask(task, canManage, members)).join("") || '<p class="tasks-empty">No open work tasks were found.</p>';
+    materialList.innerHTML = sortTasks(materials).map((task) => renderTask(task, canManage, members)).join("") || '<p class="tasks-empty">No materials need to be ordered.</p>';
+    completedList.innerHTML = sortTasks(completed).map((task) => renderTask(task, canManage, members)).join("") || '<p class="tasks-empty">No completed tasks were found.</p>';
   }
 
   async function load() {
@@ -138,14 +147,11 @@ export function createTasksModule({ supabase, companyId, canManage }) {
     ]);
     if (summaryResult.error || projectResult.error || memberResult.error) { showMessage("Tasks could not be loaded.", true); return; }
     rows = summaryResult.data || [];
+    members = memberResult.data || [];
     readControls();
     tasks = buildTaskHistory(rows);
     projectSelect.innerHTML = '<option value="General">General / no project</option>' + (projectResult.data || []).map((project) => `<option value="${escapeHtml(project.name)}">${escapeHtml(project.name)}</option>`).join("");
-    assigneeSelect.innerHTML = '<option value="">Unassigned</option>' + (memberResult.data || []).map((member) => {
-      const name = member.full_name || member.email || "Unnamed user";
-      const label = member.full_name && member.email ? `${member.full_name} (${member.email})` : name;
-      return `<option value="${escapeHtml(name)}">${escapeHtml(label)}</option>`;
-    }).join("");
+    assigneeSelect.innerHTML = assigneeOptions("", members);
     render();
   }
 
@@ -165,15 +171,16 @@ export function createTasksModule({ supabase, companyId, canManage }) {
   });
 
   view.addEventListener("change", async (event) => {
-    const select = event.target.closest(".task-status-select");
+    const select = event.target.closest(".task-status-select, .task-assignee-select");
     if (!select || !canManage) return;
     const id = select.closest(".ai-task-card")?.dataset.taskId;
     if (!id) return;
     select.disabled = true;
     try {
-      taskOverrides[id] = { ...(taskOverrides[id] || {}), status: select.value, updated_at: new Date().toISOString() };
+      const field = select.classList.contains("task-status-select") ? "status" : "assigned_to";
+      taskOverrides[id] = { ...(taskOverrides[id] || {}), [field]: select.value, updated_at: new Date().toISOString() };
       await persistControls();
-      showMessage("Task status updated.");
+      showMessage(field === "status" ? "Task status updated." : "Task assignment updated.");
       await load();
     } catch { showMessage("The task status could not be saved.", true); select.disabled = false; }
   });
