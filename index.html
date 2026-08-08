@@ -204,6 +204,18 @@
       <section id="tasksView" class="dashboard-content" aria-labelledby="tasksTitle" hidden>
         <header class="dashboard-header"><div><p class="eyebrow">From all daily reports</p><h1 id="tasksTitle">Tasks</h1></div></header>
         <div id="tasksMessage" class="message message-error" role="alert" hidden></div>
+        <section id="manualTaskCard" class="workspace-card manual-task-card">
+          <header><div><p class="eyebrow">Task Manager</p><h2>Add task manually</h2></div></header>
+          <form id="manualTaskForm">
+            <label>Project<select id="manualTaskProject"></select></label>
+            <label class="manual-task-details">Task<input id="manualTaskDetails" required placeholder="What needs to be done?"></label>
+            <label>Type<select id="manualTaskType"><option value="work">Work task</option><option value="material">Material to order</option></select></label>
+            <label>Assigned to<input id="manualTaskAssignee" placeholder="Person or company"></label>
+            <label>Due date<input id="manualTaskDueDate" type="date"></label>
+            <label>Status<select id="manualTaskStatus"><option value="open">Open</option><option value="in_progress">In progress</option><option value="completed">Completed</option></select></label>
+            <button id="addManualTaskButton" class="primary-button" type="submit">Add task</button>
+          </form>
+        </section>
         <section class="task-metric-grid" aria-label="Task overview">
           <article><span>Open work</span><strong id="openTaskCount">0</strong></article>
           <article><span>Materials to order</span><strong id="materialTaskCount">0</strong></article>

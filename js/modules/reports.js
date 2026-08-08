@@ -390,7 +390,11 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     try {
       const priorOpenTasks = await loadPriorOpenTasks();
       const data = await callAi({ action: "summarize", report_date: filterDate.value, prior_open_tasks: priorOpenTasks, reports: reports.map((r) => ({ report_date: r.report_date, submitted_by: r.reporter_name, project: projects.find((p) => p.id === r.project_id)?.name || "General", report: r.english_text, structured_report: parseStructuredReport(r.english_summary) })) });
-      const { error } = await supabase.from("daily_report_summaries").upsert({ company_id: companyId, report_date: filterDate.value, english_summary: data.english_summary, generated_by: session.user.id, updated_at: new Date().toISOString() }, { onConflict: "company_id,report_date" });
+      const generatedSummary = parseDailySummary(data.english_summary) || {};
+      const existingSummary = parseDailySummary(savedSummaryValue) || {};
+      generatedSummary.manual_tasks = existingSummary.manual_tasks || [];
+      generatedSummary.task_overrides = existingSummary.task_overrides || {};
+      const { error } = await supabase.from("daily_report_summaries").upsert({ company_id: companyId, report_date: filterDate.value, english_summary: JSON.stringify(generatedSummary), generated_by: session.user.id, updated_at: new Date().toISOString() }, { onConflict: "company_id,report_date" });
       if (error) throw error;
       await loadReports();
     } catch (error) { message.textContent = error.message || "The summary could not be created."; message.hidden = false; }
