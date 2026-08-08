@@ -75,6 +75,7 @@ export function createTasksModule({ supabase, companyId, canManage }) {
   const formCard = document.querySelector("#manualTaskCard");
   const form = document.querySelector("#manualTaskForm");
   const projectSelect = document.querySelector("#manualTaskProject");
+  const assigneeSelect = document.querySelector("#manualTaskAssignee");
   const workList = document.querySelector("#openTasksList");
   const materialList = document.querySelector("#materialTasksList");
   const completedList = document.querySelector("#completedTasksList");
@@ -130,15 +131,21 @@ export function createTasksModule({ supabase, companyId, canManage }) {
 
   async function load() {
     message.hidden = true;
-    const [summaryResult, projectResult] = await Promise.all([
+    const [summaryResult, projectResult, memberResult] = await Promise.all([
       supabase.from("daily_report_summaries").select("id,report_date,english_summary").eq("company_id", companyId).order("report_date", { ascending: true }),
       supabase.from("projects").select("name").eq("company_id", companyId).order("name"),
+      supabase.from("company_members").select("full_name,email").eq("company_id", companyId).eq("is_active", true).order("full_name"),
     ]);
-    if (summaryResult.error || projectResult.error) { showMessage("Tasks could not be loaded.", true); return; }
+    if (summaryResult.error || projectResult.error || memberResult.error) { showMessage("Tasks could not be loaded.", true); return; }
     rows = summaryResult.data || [];
     readControls();
     tasks = buildTaskHistory(rows);
     projectSelect.innerHTML = '<option value="General">General / no project</option>' + (projectResult.data || []).map((project) => `<option value="${escapeHtml(project.name)}">${escapeHtml(project.name)}</option>`).join("");
+    assigneeSelect.innerHTML = '<option value="">Unassigned</option>' + (memberResult.data || []).map((member) => {
+      const name = member.full_name || member.email || "Unnamed user";
+      const label = member.full_name && member.email ? `${member.full_name} (${member.email})` : name;
+      return `<option value="${escapeHtml(name)}">${escapeHtml(label)}</option>`;
+    }).join("");
     render();
   }
 
@@ -148,7 +155,7 @@ export function createTasksModule({ supabase, companyId, canManage }) {
     const button = document.querySelector("#addManualTaskButton");
     button.disabled = true;
     try {
-      manualTasks.push({ id: newId(), source: "manual", project: projectSelect.value || "General", details: document.querySelector("#manualTaskDetails").value.trim(), assigned_to: document.querySelector("#manualTaskAssignee").value.trim(), due_date: document.querySelector("#manualTaskDueDate").value || "", status: document.querySelector("#manualTaskStatus").value, is_material: document.querySelector("#manualTaskType").value === "material", source_date: today() });
+      manualTasks.push({ id: newId(), source: "manual", project: projectSelect.value || "General", details: document.querySelector("#manualTaskDetails").value.trim(), assigned_to: assigneeSelect.value, due_date: document.querySelector("#manualTaskDueDate").value || "", status: document.querySelector("#manualTaskStatus").value, is_material: document.querySelector("#manualTaskType").value === "material", source_date: today() });
       await persistControls();
       form.reset();
       showMessage("Task added successfully.");
