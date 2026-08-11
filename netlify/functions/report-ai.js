@@ -2,7 +2,7 @@ function json(statusCode, body) {
   return new Response(JSON.stringify(body), { status: statusCode, headers: { "content-type": "application/json" } });
 }
 
-const REPORT_AI_VERSION = "2026-08-10-structured-v6";
+const REPORT_AI_VERSION = "2026-08-10-structured-v7";
 
 async function verifyUser(token, supabaseUrl, publicKey) {
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: publicKey, authorization: `Bearer ${token}` } });
@@ -26,7 +26,7 @@ const MATERIAL_ALREADY_AVAILABLE = /\b(delivered|received|purchased|bought|avail
 const LABOR_NOT_YET_PERFORMED = /\b(will|scheduled|plans? to|pending|responsible for|to (?:pick|deliver|install|start|begin|return|come|reinstall))\b/i;
 const INSPECTION_EVIDENCE = /\b(inspect(?:ion|or|ed|ing)?|correction notice|sign[- ]?off)\b/i;
 const EXPLICIT_RISK = /\b(noise complaint|complaint.{0,30}noise|not wearing (?:helmets?|vests?|ppe)|without (?:helmets?|vests?|ppe)|safety (?:violation|hazard|concern|issue)|unsafe|injur(?:y|ed)|accident)\b/i;
-const EXPLICIT_BLOCKER = /\b(incorrect|wrong|not (?:right|correct)|damaged|broken|failed|missing|shortage|delay(?:ed)?|held up|cannot|can't|unable|stopped|blocked|retrofit|should be|needs? (?:repair|replacement|correction|rework|return)|requires? (?:repair|replacement|correction|rework|epoxy|new rebar))\b/i;
+const EXPLICIT_BLOCKER = /\b(incorrect(?:ly)?|wrong|not (?:right|correct)|damaged|broken|failed|missing|shortage|delay(?:ed)?|held up|cannot|can't|unable|stopped|blocked|retrofit|should (?:have been|be)|needs? (?:repair|replacement|correction|rework|return)|requires? (?:repair|replacement|correction|rework|epoxy|new rebar))\b/i;
 
 function inspectionKey(item) {
   const text = `${item?.details || ""} ${item?.evidence || ""}`.toLowerCase();
@@ -72,6 +72,14 @@ function summaryItemAlreadyIncluded(items, candidate) {
     && (sameTask(item?.details, candidate?.details) || sameTask(item?.evidence, candidate?.evidence)));
 }
 
+function blockerKey(item) {
+  const text = `${item?.details || ""} ${item?.evidence || ""}`.toLowerCase();
+  const topic = /\brebar\b|\bpier cages?\b/.test(text) ? "rebar-pier"
+    : /\bramon\b|\b(?:low|high)[- ]?voltage\b/.test(text) ? "ramon-voltage"
+      : taskKeywords(text).slice(0, 4).sort().join("-");
+  return `${String(item?.project || "General").toLowerCase()}::${topic}`;
+}
+
 function materialNeedItems(item) {
   return String(item?.details || "").split(/;\s*|\s+and\s+(?=(?:purchased|bought|received|delivered)\b)/i).map((details) => ({ ...item, details: details.trim() })).filter((part) => {
     const details = part.details;
@@ -84,21 +92,23 @@ function materialNeedItems(item) {
 }
 
 function mergeRelatedMaterialItems(items) {
-  const result = [...items];
-  for (let index = 0; index < result.length; index += 1) {
-    const item = result[index];
-    if (!/\b(?:low|high)[- ]?voltage\b/i.test(String(item?.details || ""))) continue;
-    const companionIndex = result.findIndex((candidate, candidateIndex) => candidateIndex !== index
+  const consumed = new Set();
+  const result = [];
+  items.forEach((item, index) => {
+    if (consumed.has(index)) return;
+    if (!/\b(?:low|high)[- ]?voltage\b/i.test(String(item?.details || ""))) { result.push(item); return; }
+    const reporter = item.reported_by?.[0] || "";
+    const group = items.map((candidate, candidateIndex) => ({ candidate, candidateIndex })).filter(({ candidate, candidateIndex }) => !consumed.has(candidateIndex)
       && sameProject(item?.project, candidate?.project)
-      && /\b(?:client|customer)\b.{0,60}\b(?:purchase|buy|order)\b|\boriginal order\b.{0,40}\breturn/i.test(String(candidate?.details || "")));
-    if (companionIndex < 0) continue;
-    const companion = result[companionIndex];
-    const details = `${String(item.details || "").trim().replace(/[.]$/, "")}; ${String(companion.details || "").trim().replace(/^./, (letter) => letter.toLowerCase())}`;
-    const reportedBy = [...new Set([...(item.reported_by || []), ...(companion.reported_by || [])])];
-    result[index] = { ...item, details, reported_by: reportedBy, evidence: `${item.evidence || item.details} ${companion.evidence || companion.details}`.trim() };
-    result.splice(companionIndex, 1);
-    if (companionIndex < index) index -= 1;
-  }
+      && (!reporter || !candidate.reported_by?.length || candidate.reported_by.includes(reporter))
+      && (/\b(?:low|high)[- ]?voltage\b/i.test(String(candidate?.details || ""))
+        || /\b(?:client|customer)\b.{0,80}\b(?:purchase|buy|order)\b|\boriginal order\b.{0,50}\breturn(?:ed|ing)?\b/i.test(String(candidate?.details || ""))));
+    group.forEach(({ candidateIndex }) => consumed.add(candidateIndex));
+    const uniqueDetails = [...new Map(group.map(({ candidate }) => [String(candidate.details || "").trim().toLowerCase(), String(candidate.details || "").trim().replace(/[.]$/, "")])).values()];
+    const reportedBy = [...new Set(group.flatMap(({ candidate }) => candidate.reported_by || []))];
+    const evidence = [...new Set(group.map(({ candidate }) => String(candidate.evidence || candidate.details || "").trim()).filter(Boolean))].join(" ");
+    result.push({ ...item, details: `${uniqueDetails.join("; ")}.`, reported_by: reportedBy, evidence });
+  });
   return result;
 }
 
@@ -129,6 +139,12 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
   const completedWork = (Array.isArray(summary.completed_work) ? summary.completed_work : []).flatMap(atomicSummaryItems).flatMap((item) => {
     const clauses = completedClauses(item?.details);
     return clauses.length ? [{ ...item, details: clauses.join(" ") }] : [];
+  });
+  submittedReports.forEach((report) => {
+    String(report?.report || "").split(/(?<=[.!?])\s+|[;\n]+/).map((part) => part.trim()).filter((part) => part && COMPLETION_EVIDENCE.test(part) && !INCOMPLETE_WORK.test(part)).forEach((evidence) => {
+      const item = { project: report.project || "General", details: evidence, reported_by: [report.submitted_by].filter(Boolean), evidence };
+      if (!summaryItemAlreadyIncluded(completedWork, item)) completedWork.push(item);
+    });
   });
   const inspectionMap = new Map();
   (Array.isArray(summary.inspections) ? summary.inspections : []).flatMap(atomicSummaryItems).filter((item) =>
@@ -187,16 +203,18 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
   const labor = (Array.isArray(summary.labor) ? summary.labor : []).filter((item) =>
     !LABOR_NOT_YET_PERFORMED.test(`${item?.details || ""} ${item?.evidence || ""}`)
   );
-  const blockersAndDelays = Array.isArray(summary.blockers_and_delays) ? [...summary.blockers_and_delays] : [];
+  const initialBlockers = Array.isArray(summary.blockers_and_delays) ? summary.blockers_and_delays : [];
+  const blockersAndDelays = [];
   const addBlocker = (item) => {
-    const existingIndex = blockersAndDelays.findIndex((existing) => sameProject(existing?.project, item?.project)
-      && (sameTask(existing?.details, item?.details) || sameTask(existing?.evidence, item?.evidence)));
+    const existingIndex = blockersAndDelays.findIndex((existing) => blockerKey(existing) === blockerKey(item)
+      || (sameProject(existing?.project, item?.project) && (sameTask(existing?.details, item?.details) || sameTask(existing?.evidence, item?.evidence))));
     if (existingIndex < 0) { blockersAndDelays.push(item); return; }
     const existing = blockersAndDelays[existingIndex];
-    const candidateNamesProblem = /\b(incorrect|wrong|not (?:right|correct)|damaged|broken|failed|missing|shortage|delay(?:ed)?)\b/i.test(`${item?.details || ""} ${item?.evidence || ""}`);
-    const existingNamesProblem = /\b(incorrect|wrong|not (?:right|correct)|damaged|broken|failed|missing|shortage|delay(?:ed)?)\b/i.test(`${existing?.details || ""} ${existing?.evidence || ""}`);
+    const candidateNamesProblem = /\b(incorrect(?:ly)?|wrong|not (?:right|correct)|damaged|broken|failed|missing|shortage|delay(?:ed)?)\b/i.test(`${item?.details || ""} ${item?.evidence || ""}`);
+    const existingNamesProblem = /\b(incorrect(?:ly)?|wrong|not (?:right|correct)|damaged|broken|failed|missing|shortage|delay(?:ed)?)\b/i.test(`${existing?.details || ""} ${existing?.evidence || ""}`);
     if (candidateNamesProblem && !existingNamesProblem) blockersAndDelays[existingIndex] = item;
   };
+  initialBlockers.forEach(addBlocker);
   submittedReports.forEach((report) => {
     String(report?.report || "").split(/(?<=[.!?])\s+|[;\n]+/).map((part) => part.trim()).filter((part) => part && EXPLICIT_BLOCKER.test(part)).forEach((evidence) => {
       const item = { project: report.project || "General", details: evidence, reported_by: [report.submitted_by].filter(Boolean), evidence };
