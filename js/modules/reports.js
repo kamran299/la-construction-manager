@@ -277,7 +277,10 @@ export function createReportsModule({ supabase, session, companyId, membership, 
 
   async function callAi(payload) {
     const response = await fetch("/.netlify/functions/report-ai", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` }, body: JSON.stringify(payload) });
-    const data = await response.json();
+    const responseText = await response.text();
+    let data;
+    try { data = JSON.parse(responseText); }
+    catch { throw new Error(`AI server returned an unreadable response (HTTP ${response.status}).`); }
     if (!response.ok) throw new Error(`${data.error || "AI service failed"}${data.error_code ? ` (${data.error_code})` : ""}`);
     return data;
   }
@@ -390,21 +393,24 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     message.textContent = "AI is analyzing today's reports. Please wait...";
     message.classList.remove("message-error");
     message.hidden = false;
+    let summaryStage = "Loading previous open tasks";
     try {
       const priorOpenTasks = await loadPriorOpenTasks();
+      summaryStage = "AI analysis";
       const data = await callAi({ action: "summarize", report_date: filterDate.value, prior_open_tasks: priorOpenTasks, reports: reports.map((r) => ({ report_date: r.report_date, submitted_by: r.reporter_name, project: projects.find((p) => p.id === r.project_id)?.name || "General", report: r.english_text })) });
       message.textContent = "AI analysis finished. Saving the 5 PM summary...";
-      const generatedSummary = parseDailySummary(data.english_summary) || {};
+      const generatedSummary = data.daily_summary && typeof data.daily_summary === "object" ? data.daily_summary : (parseDailySummary(data.english_summary) || {});
       const existingSummary = parseDailySummary(savedSummaryValue) || {};
       generatedSummary.manual_tasks = existingSummary.manual_tasks || [];
       generatedSummary.task_overrides = existingSummary.task_overrides || {};
+      summaryStage = "Saving to Supabase";
       const { error } = await supabase.from("daily_report_summaries").upsert({ company_id: companyId, report_date: filterDate.value, english_summary: JSON.stringify(generatedSummary), generated_by: session.user.id, updated_at: new Date().toISOString() }, { onConflict: "company_id,report_date" });
       if (error) throw error;
       await loadReports();
       message.textContent = "5 PM summary created successfully.";
       message.classList.remove("message-error");
       message.hidden = false;
-    } catch (error) { message.textContent = error.message || "The summary could not be created."; message.classList.add("message-error"); message.hidden = false; }
+    } catch (error) { message.textContent = `${summaryStage}: ${error.message || "The summary could not be created."}`; message.classList.add("message-error"); message.hidden = false; }
     finally { summaryButton.disabled = false; summaryButton.textContent = "Generate / refresh 5 PM summary"; }
   });
   filterDate.addEventListener("change", loadReports);
