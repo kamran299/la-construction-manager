@@ -278,7 +278,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
   async function callAi(payload) {
     const response = await fetch("/.netlify/functions/report-ai", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` }, body: JSON.stringify(payload) });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "AI service failed");
+    if (!response.ok) throw new Error(`${data.error || "AI service failed"}${data.error_code ? ` (${data.error_code})` : ""}`);
     return data;
   }
 
@@ -385,11 +385,15 @@ export function createReportsModule({ supabase, session, companyId, membership, 
   });
 
   summaryButton.addEventListener("click", async () => {
-    if (!reports.length) return;
+    if (!reports.length) { message.textContent = "No reports were found for the selected date."; message.classList.add("message-error"); message.hidden = false; return; }
     summaryButton.disabled = true; summaryButton.textContent = "Analyzing reports...";
+    message.textContent = "AI is analyzing today's reports. Please wait...";
+    message.classList.remove("message-error");
+    message.hidden = false;
     try {
       const priorOpenTasks = await loadPriorOpenTasks();
-      const data = await callAi({ action: "summarize", report_date: filterDate.value, prior_open_tasks: priorOpenTasks, reports: reports.map((r) => ({ report_date: r.report_date, submitted_by: r.reporter_name, project: projects.find((p) => p.id === r.project_id)?.name || "General", report: r.english_text, structured_report: parseStructuredReport(r.english_summary) })) });
+      const data = await callAi({ action: "summarize", report_date: filterDate.value, prior_open_tasks: priorOpenTasks, reports: reports.map((r) => ({ report_date: r.report_date, submitted_by: r.reporter_name, project: projects.find((p) => p.id === r.project_id)?.name || "General", report: r.english_text })) });
+      message.textContent = "AI analysis finished. Saving the 5 PM summary...";
       const generatedSummary = parseDailySummary(data.english_summary) || {};
       const existingSummary = parseDailySummary(savedSummaryValue) || {};
       generatedSummary.manual_tasks = existingSummary.manual_tasks || [];
@@ -397,7 +401,10 @@ export function createReportsModule({ supabase, session, companyId, membership, 
       const { error } = await supabase.from("daily_report_summaries").upsert({ company_id: companyId, report_date: filterDate.value, english_summary: JSON.stringify(generatedSummary), generated_by: session.user.id, updated_at: new Date().toISOString() }, { onConflict: "company_id,report_date" });
       if (error) throw error;
       await loadReports();
-    } catch (error) { message.textContent = error.message || "The summary could not be created."; message.hidden = false; }
+      message.textContent = "5 PM summary created successfully.";
+      message.classList.remove("message-error");
+      message.hidden = false;
+    } catch (error) { message.textContent = error.message || "The summary could not be created."; message.classList.add("message-error"); message.hidden = false; }
     finally { summaryButton.disabled = false; summaryButton.textContent = "Generate / refresh 5 PM summary"; }
   });
   filterDate.addEventListener("change", loadReports);

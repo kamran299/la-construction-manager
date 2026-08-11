@@ -2,7 +2,7 @@ function json(statusCode, body) {
   return new Response(JSON.stringify(body), { status: statusCode, headers: { "content-type": "application/json" } });
 }
 
-const REPORT_AI_VERSION = "2026-08-07-evidence-v2";
+const REPORT_AI_VERSION = "2026-08-10-structured-v1";
 
 async function verifyUser(token, supabaseUrl, publicKey) {
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: publicKey, authorization: `Bearer ${token}` } });
@@ -136,6 +136,37 @@ Poly (پُلی/پلی) is a person's name, never plate compactor. Subfloor (سا
 Standard terms include excavation, grading, compaction, trench, backfill, layout, survey, footing, foundation, formwork/forms, rebar, anchor bolt, slab, stem wall, retaining wall, waterproofing, drainage, concrete pump, framing, joist, beam, header, shear wall, sheathing, blocking, truss, roofing, rough-in, MEP, plumbing, electrical, HVAC, ductwork, fire sprinkler, low voltage, insulation, drywall/sheetrock, taping, texture, stucco, siding, flashing, scaffolding, windows, doors, cabinets, countertops, tile, hardwood, flooring, baseboard, trim, painting, finish carpentry, inspection, correction notice, punch list, change order, RFI, submittal, material delivery, subcontractor/sub, superintendent, foreman and crew.
 Persian speakers frequently pronounce these as English loanwords; translate them to the matching standard English construction term. Preserve all people, company and project names, addresses, dates, times, measurements and quantities exactly. If an unfamiliar word may be a name or specialized term, transliterate it instead of inventing or substituting an unrelated item.`;
 
+const SUMMARY_ITEM_PROPERTIES = {
+  project: { type: "string" },
+  details: { type: "string" },
+  reported_by: { type: "array", items: { type: "string" } },
+  evidence: { type: "string" },
+};
+const SUMMARY_ITEM_SCHEMA = { type: "object", additionalProperties: false, properties: SUMMARY_ITEM_PROPERTIES, required: Object.keys(SUMMARY_ITEM_PROPERTIES) };
+const DAILY_SUMMARY_FORMAT = {
+  type: "json_schema",
+  name: "daily_construction_summary",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      executive_summary: { type: "string" },
+      completed_work: { type: "array", items: SUMMARY_ITEM_SCHEMA },
+      blockers_and_delays: { type: "array", items: SUMMARY_ITEM_SCHEMA },
+      tomorrow_plan: { type: "array", items: { type: "object", additionalProperties: false, properties: { ...SUMMARY_ITEM_PROPERTIES, source: { type: "string", enum: ["today", "carryover"] }, source_date: { type: "string" }, carryover_id: { anyOf: [{ type: "string" }, { type: "null" }] } }, required: [...Object.keys(SUMMARY_ITEM_PROPERTIES), "source", "source_date", "carryover_id"] } },
+      labor: { type: "array", items: SUMMARY_ITEM_SCHEMA },
+      inspections: { type: "array", items: SUMMARY_ITEM_SCHEMA },
+      materials_needed: { type: "array", items: SUMMARY_ITEM_SCHEMA },
+      overdue_work: { type: "array", items: SUMMARY_ITEM_SCHEMA },
+      risks: { type: "array", items: SUMMARY_ITEM_SCHEMA },
+      contributors: { type: "array", items: { type: "object", additionalProperties: false, properties: { name: { type: "string" }, projects: { type: "array", items: { type: "string" } } }, required: ["name", "projects"] } },
+      resolved_prior_tasks: { type: "array", items: { type: "object", additionalProperties: false, properties: { carryover_id: { type: "string" }, evidence: { type: "string" } }, required: ["carryover_id", "evidence"] } },
+    },
+    required: ["executive_summary", "completed_work", "blockers_and_delays", "tomorrow_plan", "labor", "inspections", "materials_needed", "overdue_work", "risks", "contributors", "resolved_prior_tasks"],
+  },
+};
+
 export default async (request) => {
   if (request.method === "GET") return json(200, { service: "report-ai", version: REPORT_AI_VERSION });
   if (request.method !== "POST") return json(405, { error: "Method not allowed" });
@@ -194,12 +225,13 @@ Use an empty array for every category not explicitly mentioned.`;
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { authorization: `Bearer ${openaiKey}`, "content-type": "application/json" },
-    body: JSON.stringify({ model: Netlify.env.get("OPENAI_MODEL") || "gpt-4.1-mini", instructions, input }),
+    body: JSON.stringify({ model: Netlify.env.get("OPENAI_MODEL") || "gpt-4.1-mini", instructions, input, max_output_tokens: isSummary ? 8000 : 2500, ...(isSummary ? { text: { format: DAILY_SUMMARY_FORMAT } } : {}) }),
   });
   if (!response.ok) {
     const failure = await response.json().catch(() => ({}));
-    console.error("OpenAI report processing failed", response.status, failure?.error?.message || "Unknown upstream error");
-    return json(502, { error: isSummary ? "The 5 PM summary is temporarily unavailable. Please try again." : "AI report processing is temporarily unavailable. Please try again." });
+    const errorCode = failure?.error?.code || failure?.error?.type || `openai_${response.status}`;
+    console.error("OpenAI report processing failed", response.status, errorCode, failure?.error?.message || "Unknown upstream error");
+    return json(502, { error: isSummary ? "The 5 PM summary is temporarily unavailable. Please try again." : "AI report processing is temporarily unavailable. Please try again.", error_code: errorCode });
   }
   const responseData = await response.json().catch(() => null);
   const text = outputText(responseData || {}).trim();
@@ -208,8 +240,9 @@ Use an empty array for every category not explicitly mentioned.`;
     try {
       const dailySummary = sanitizeSummary(parseModelJson(text), body.prior_open_tasks || [], body.reports || []);
       return json(200, { daily_summary: dailySummary, english_summary: JSON.stringify(dailySummary), processing_version: REPORT_AI_VERSION });
-    } catch {
-      return json(502, { error: "The daily analysis could not be structured. Please try again." });
+    } catch (error) {
+      console.error("Daily analysis JSON failed", error?.message || "Unknown parsing error");
+      return json(502, { error: "The daily analysis could not be structured. Please try again.", error_code: "invalid_summary_json" });
     }
   }
   try {
