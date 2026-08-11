@@ -2,7 +2,7 @@ function json(statusCode, body) {
   return new Response(JSON.stringify(body), { status: statusCode, headers: { "content-type": "application/json" } });
 }
 
-const REPORT_AI_VERSION = "2026-08-10-structured-v2";
+const REPORT_AI_VERSION = "2026-08-10-structured-v3";
 
 async function verifyUser(token, supabaseUrl, publicKey) {
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: publicKey, authorization: `Bearer ${token}` } });
@@ -26,6 +26,7 @@ const MATERIAL_ALREADY_AVAILABLE = /\b(delivered|received|purchased|bought|avail
 const LABOR_NOT_YET_PERFORMED = /\b(will|scheduled|plans? to|pending|responsible for|to (?:pick|deliver|install|start|begin|return|come|reinstall))\b/i;
 const INSPECTION_EVIDENCE = /\b(inspect(?:ion|or|ed|ing)?|correction notice|sign[- ]?off)\b/i;
 const EXPLICIT_RISK = /\b(noise complaint|complaint.{0,30}noise|not wearing (?:helmets?|vests?|ppe)|without (?:helmets?|vests?|ppe)|safety (?:violation|hazard|concern|issue)|unsafe|injur(?:y|ed)|accident)\b/i;
+const EXPLICIT_BLOCKER = /\b(incorrect|wrong|damaged|broken|failed|missing|shortage|delay(?:ed)?|held up|cannot|can't|unable|stopped|blocked|needs? (?:repair|replacement|correction|rework|return)|requires? (?:repair|replacement|correction|rework|epoxy|new rebar))\b/i;
 
 function inspectionKey(item) {
   const text = `${item?.details || ""} ${item?.evidence || ""}`.toLowerCase();
@@ -60,6 +61,11 @@ function sameTask(task, evidence) {
 
 function sameProject(left, right) {
   return String(left || "General").trim().toLowerCase() === String(right || "General").trim().toLowerCase();
+}
+
+function summaryItemAlreadyIncluded(items, candidate) {
+  return items.some((item) => sameProject(item?.project, candidate?.project)
+    && (sameTask(item?.details, candidate?.details) || sameTask(item?.evidence, candidate?.evidence)));
 }
 
 function materialNeedItems(item) {
@@ -149,6 +155,13 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
   const labor = (Array.isArray(summary.labor) ? summary.labor : []).filter((item) =>
     !LABOR_NOT_YET_PERFORMED.test(`${item?.details || ""} ${item?.evidence || ""}`)
   );
+  const blockersAndDelays = Array.isArray(summary.blockers_and_delays) ? [...summary.blockers_and_delays] : [];
+  submittedReports.forEach((report) => {
+    String(report?.report || "").split(/(?<=[.!?])\s+|[;\n]+/).map((part) => part.trim()).filter((part) => part && EXPLICIT_BLOCKER.test(part)).forEach((evidence) => {
+      const item = { project: report.project || "General", details: evidence, reported_by: [report.submitted_by].filter(Boolean), evidence };
+      if (!summaryItemAlreadyIncluded(blockersAndDelays, item)) blockersAndDelays.push(item);
+    });
+  });
   const risks = Array.isArray(summary.risks) ? [...summary.risks] : [];
   const riskKeys = new Set(risks.map(riskKey));
   submittedReports.forEach((report) => {
@@ -175,7 +188,7 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
   const resolvedTasks = priorTasks.filter((task) => resolvedIds.has(task.carryover_id));
   const overdueWork = (Array.isArray(summary.overdue_work) ? summary.overdue_work : []).filter((item) => !resolvedTasks.some((task) => sameProject(task.project, item.project) && sameTask(task.details, item.details)));
   const finalMaterialsNeeded = materialsNeeded.filter((item) => !/^\s*(order|buy|purchase|procure)\b/i.test(String(item.details || "")) || !resolvedTasks.some((task) => sameProject(task.project, item.project) && sameTask(task.details, item.details)));
-  return { ...summary, completed_work: completedWork, inspections, tomorrow_plan: finalTomorrowPlan, labor, materials_needed: finalMaterialsNeeded, overdue_work: overdueWork, risks, resolved_prior_tasks: resolvedPriorTasks };
+  return { ...summary, completed_work: completedWork, blockers_and_delays: blockersAndDelays, inspections, tomorrow_plan: finalTomorrowPlan, labor, materials_needed: finalMaterialsNeeded, overdue_work: overdueWork, risks, resolved_prior_tasks: resolvedPriorTasks };
 }
 
 export { sanitizeSummary };
