@@ -2,7 +2,7 @@ function json(statusCode, body) {
   return new Response(JSON.stringify(body), { status: statusCode, headers: { "content-type": "application/json" } });
 }
 
-const REPORT_AI_VERSION = "2026-08-10-structured-v5";
+const REPORT_AI_VERSION = "2026-08-10-structured-v6";
 
 async function verifyUser(token, supabaseUrl, publicKey) {
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: publicKey, authorization: `Bearer ${token}` } });
@@ -20,7 +20,7 @@ function parseModelJson(text) {
 }
 
 const INCOMPLETE_WORK = /\b(start(?:ed|ing)?|began|beginning|underway|in progress|scheduled|planned|pending|will|to be)\b/i;
-const COMPLETION_EVIDENCE = /\b(completed?|finished|done|resolved|installed|delivered|passed|repaired|corrected|closed)\b/i;
+const COMPLETION_EVIDENCE = /\b(completed?|finished|done|resolved|installed|delivered|passed|repaired|corrected|closed|removed|changed|widened|cleaned|compacted)\b/i;
 const MATERIAL_ACTION = /\b(order(?:ed|ing)?|buy|purchase(?:d|ing)?|procure(?:d|ment|ing)?|source|material(?:s)?\s+(?:needed|required|missing|insufficient))\b/i;
 const MATERIAL_ALREADY_AVAILABLE = /\b(delivered|received|purchased|bought|available|on[- ]?site|awaiting (?:pickup|installation)|waiting (?:for )?(?:pickup|installation))\b/i;
 const LABOR_NOT_YET_PERFORMED = /\b(will|scheduled|plans? to|pending|responsible for|to (?:pick|deliver|install|start|begin|return|come|reinstall))\b/i;
@@ -42,12 +42,16 @@ function riskKey(item) {
 }
 
 function materialKey(value) {
+  const text = String(value || "").toLowerCase();
+  if (/\bsubfloor\b/.test(text) && /\bwood\b/.test(text)) return "subfloor-wood";
+  if (/\bv9\b/.test(text) && /\bbox extension\b/.test(text)) return "v9-box-extension";
+  if (/\bramon\b/.test(text) && /\blights?\b/.test(text)) return "ramon-lights";
   const ignored = new Set(["a", "an", "the", "to", "be", "is", "are", "was", "were", "must", "should", "for", "material", "materials", "need", "needed", "needs", "require", "required", "missing", "insufficient", "order", "ordered", "ordering", "buy", "purchase", "purchased", "purchasing", "procure", "procured", "procurement", "procuring", "source"]);
-  return String(value || "").toLowerCase().match(/[a-z0-9]+/g)?.filter((word) => !ignored.has(word)).sort().join(" ") || "";
+  return text.match(/[a-z0-9]+/g)?.filter((word) => !ignored.has(word)).sort().join(" ") || "";
 }
 
 function taskKeywords(value) {
-  const ignored = new Set(["a", "an", "the", "to", "be", "is", "are", "was", "were", "from", "of", "on", "at", "in", "for", "and", "or", "then", "tomorrow", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "thirty", "material", "materials", "remove", "removed", "order", "ordered", "buy", "bought", "purchase", "purchased", "procure", "receive", "received", "start", "started", "continue", "continued", "install", "installed", "installation", "apply", "applied", "widen", "widened", "change", "changed", "complete", "completed"]);
+  const ignored = new Set(["a", "an", "the", "to", "be", "is", "are", "was", "were", "from", "of", "on", "at", "in", "for", "and", "or", "then", "by", "with", "using", "now", "need", "needs", "require", "requires", "requiring", "tomorrow", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "thirty", "material", "materials", "remove", "removed", "order", "ordered", "buy", "bought", "purchase", "purchased", "procure", "receive", "received", "start", "started", "continue", "continued", "install", "installed", "installation", "apply", "applied", "widen", "widened", "change", "changed", "complete", "completed"]);
   return [...new Set(String(value || "").toLowerCase().match(/[a-z0-9]+/g)?.map((word) => word.endsWith("s") && word.length > 4 ? word.slice(0, -1) : word).filter((word) => !ignored.has(word)) || [])];
 }
 
@@ -150,6 +154,12 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
     if (!task?.carryover_id || resolvedIds.has(task.carryover_id)) return;
     const completedMatch = completedWork.find((item) => sameProject(task.project, item.project) && sameTask(task.details, `${item.details || ""} ${item.evidence || ""}`));
     let evidence = completedMatch?.evidence || completedMatch?.details || "";
+    if (!evidence) {
+      for (const report of submittedReports.filter((item) => sameProject(task.project, item.project))) {
+        const clause = String(report.report || "").split(/(?<=[.!?])\s+|[;\n]+/).find((part) => COMPLETION_EVIDENCE.test(part) && !INCOMPLETE_WORK.test(part) && sameTask(task.details, part));
+        if (clause) { evidence = clause; break; }
+      }
+    }
     if (!evidence && MATERIAL_ACTION.test(String(task.details || ""))) {
       const report = submittedReports.find((item) => sameProject(task.project, item.project) && String(item.report || "").split(/(?<=[.!?])\s+|[;\n]+/).some((part) => /\b(ordered|purchased|bought|procured)\b/i.test(part) && sameTask(task.details, part)));
       if (report) evidence = String(report.report || "").split(/(?<=[.!?])\s+|[;\n]+/).find((part) => /\b(ordered|purchased|bought|procured)\b/i.test(part) && sameTask(task.details, part)) || "";
@@ -170,13 +180,22 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
     carryover_id: task.carryover_id,
   }));
   const finalTomorrowPlan = [...tomorrowPlan, ...requiredCarryovers];
-  const materialsNeeded = mergeRelatedMaterialItems((Array.isArray(summary.materials_needed) ? summary.materials_needed : []).flatMap(materialNeedItems));
+  const recoveredMaterials = submittedReports.flatMap((report) => String(report?.report || "").split(/(?<=[.!?])\s+|[;\n]+/).map((part) => part.trim()).filter((part) => part && ((MATERIAL_ACTION.test(part) && !MATERIAL_ALREADY_AVAILABLE.test(part)) || /\b(?:low|high)[- ]?voltage\b/i.test(part))).map((evidence) => ({
+    project: report.project || "General", details: evidence, reported_by: [report.submitted_by].filter(Boolean), evidence,
+  })));
+  const materialsNeeded = mergeRelatedMaterialItems([...(Array.isArray(summary.materials_needed) ? summary.materials_needed : []).flatMap(materialNeedItems), ...recoveredMaterials]);
   const labor = (Array.isArray(summary.labor) ? summary.labor : []).filter((item) =>
     !LABOR_NOT_YET_PERFORMED.test(`${item?.details || ""} ${item?.evidence || ""}`)
   );
   const blockersAndDelays = Array.isArray(summary.blockers_and_delays) ? [...summary.blockers_and_delays] : [];
   const addBlocker = (item) => {
-    if (!summaryItemAlreadyIncluded(blockersAndDelays, item)) blockersAndDelays.push(item);
+    const existingIndex = blockersAndDelays.findIndex((existing) => sameProject(existing?.project, item?.project)
+      && (sameTask(existing?.details, item?.details) || sameTask(existing?.evidence, item?.evidence)));
+    if (existingIndex < 0) { blockersAndDelays.push(item); return; }
+    const existing = blockersAndDelays[existingIndex];
+    const candidateNamesProblem = /\b(incorrect|wrong|not (?:right|correct)|damaged|broken|failed|missing|shortage|delay(?:ed)?)\b/i.test(`${item?.details || ""} ${item?.evidence || ""}`);
+    const existingNamesProblem = /\b(incorrect|wrong|not (?:right|correct)|damaged|broken|failed|missing|shortage|delay(?:ed)?)\b/i.test(`${existing?.details || ""} ${existing?.evidence || ""}`);
+    if (candidateNamesProblem && !existingNamesProblem) blockersAndDelays[existingIndex] = item;
   };
   submittedReports.forEach((report) => {
     String(report?.report || "").split(/(?<=[.!?])\s+|[;\n]+/).map((part) => part.trim()).filter((part) => part && EXPLICIT_BLOCKER.test(part)).forEach((evidence) => {
@@ -210,7 +229,13 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
   });
   const resolvedTasks = priorTasks.filter((task) => resolvedIds.has(task.carryover_id));
   const overdueWork = (Array.isArray(summary.overdue_work) ? summary.overdue_work : []).filter((item) => !resolvedTasks.some((task) => sameProject(task.project, item.project) && sameTask(task.details, item.details)));
-  const finalMaterialsNeeded = materialsNeeded.filter((item) => !/^\s*(order|buy|purchase|procure)\b/i.test(String(item.details || "")) || !resolvedTasks.some((task) => sameProject(task.project, item.project) && sameTask(task.details, item.details)));
+  const finalMaterialMap = new Map();
+  materialsNeeded.filter((item) => !/^\s*(order|buy|purchase|procure)\b/i.test(String(item.details || "")) || !resolvedTasks.some((task) => sameProject(task.project, item.project) && sameTask(task.details, item.details))).forEach((item) => {
+    const key = `${String(item.project || "General").toLowerCase()}::${materialKey(item.details)}`;
+    const existing = finalMaterialMap.get(key);
+    if (!existing || String(item.details || "").length < String(existing.details || "").length) finalMaterialMap.set(key, item);
+  });
+  const finalMaterialsNeeded = [...finalMaterialMap.values()];
   return { ...summary, completed_work: completedWork, blockers_and_delays: blockersAndDelays, inspections, tomorrow_plan: finalTomorrowPlan, labor, materials_needed: finalMaterialsNeeded, overdue_work: overdueWork, risks, resolved_prior_tasks: resolvedPriorTasks };
 }
 
