@@ -2,7 +2,7 @@ function json(statusCode, body) {
   return new Response(JSON.stringify(body), { status: statusCode, headers: { "content-type": "application/json" } });
 }
 
-const REPORT_AI_VERSION = "2026-08-10-structured-v9";
+const REPORT_AI_VERSION = "2026-08-10-structured-v10";
 
 async function verifyUser(token, supabaseUrl, publicKey) {
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: publicKey, authorization: `Bearer ${token}` } });
@@ -26,7 +26,7 @@ const MATERIAL_ALREADY_AVAILABLE = /\b(delivered|received|purchased|bought|avail
 const LABOR_NOT_YET_PERFORMED = /\b(will|scheduled|plans? to|pending|responsible for|to (?:pick|deliver|install|start|begin|return|come|reinstall))\b/i;
 const INSPECTION_EVIDENCE = /\b(inspect(?:ion|or|ed|ing)?|correction notice|sign[- ]?off)\b/i;
 const EXPLICIT_RISK = /\b(risk|hazard|concern|noise complaint|complaint.{0,30}noise|not wearing (?:helmets?|vests?|ppe)|without (?:helmets?|vests?|ppe)|safety (?:violation|hazard|concern|issue)|unsafe|injur(?:y|ed)|accident)\b/i;
-const EXPLICIT_BLOCKER = /\b(incorrect(?:ly)?|wrong|not (?:right|correct)|damaged|broken|failed|missing|shortage|delay(?:ed)?|held up|cannot|can't|unable|stopped|blocked|retrofit|should (?:have been|be)|needs? (?:repair|replacement|correction|rework|return)|requires? (?:repair|replacement|correction|rework|epoxy|new rebar))\b/i;
+const EXPLICIT_BLOCKER = /\b(incorrect(?:ly)?|wrong|misinstall(?:ed|ation)?|improperly installed|not (?:right|correct)|damaged|broken|failed|missing|shortage|delay(?:ed)?|held up|cannot|can't|unable|stopped|blocked|retrofit|should (?:have been|be)|needs? (?:repair|replacement|correction|rework|return)|requires? (?:repair|replacement|correction|rework|epoxy|new rebar))\b/i;
 
 function inspectionKey(item) {
   const text = `${item?.details || ""} ${item?.evidence || ""}`.toLowerCase();
@@ -46,6 +46,7 @@ function materialKey(value) {
   if (/\bsubfloor\b/.test(text) && /\bwood\b/.test(text)) return "subfloor-wood";
   if (/\bv9\b/.test(text) && /\bbox extension\b/.test(text)) return "v9-box-extension";
   if (/\bramon\b/.test(text) && /\blights?\b/.test(text)) return "ramon-lights";
+  if (/\bgolden state\b/.test(text) && /\bwhite cap\b/.test(text)) return "golden-state-white-cap-order";
   const ignored = new Set(["a", "an", "the", "to", "be", "is", "are", "was", "were", "must", "should", "for", "material", "materials", "need", "needed", "needs", "require", "required", "missing", "insufficient", "order", "ordered", "ordering", "buy", "purchase", "purchased", "purchasing", "procure", "procured", "procurement", "procuring", "source"]);
   return text.match(/[a-z0-9]+/g)?.filter((word) => !ignored.has(word)).sort().join(" ") || "";
 }
@@ -221,8 +222,9 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
       || (sameProject(existing?.project, item?.project) && (sameTask(existing?.details, item?.details) || sameTask(existing?.evidence, item?.evidence))));
     if (existingIndex < 0) { blockersAndDelays.push(item); return; }
     const existing = blockersAndDelays[existingIndex];
-    const candidateNamesProblem = /\b(incorrect(?:ly)?|wrong|not (?:right|correct)|damaged|broken|failed|missing|shortage|delay(?:ed)?)\b/i.test(`${item?.details || ""} ${item?.evidence || ""}`);
-    const existingNamesProblem = /\b(incorrect(?:ly)?|wrong|not (?:right|correct)|damaged|broken|failed|missing|shortage|delay(?:ed)?)\b/i.test(`${existing?.details || ""} ${existing?.evidence || ""}`);
+    const problemLanguage = /\b(incorrect(?:ly)?|wrong|misinstall(?:ed|ation)?|improperly installed|not (?:right|correct)|damaged|broken|failed|missing|shortage|delay(?:ed)?)\b/i;
+    const candidateNamesProblem = problemLanguage.test(`${item?.details || ""} ${item?.evidence || ""}`);
+    const existingNamesProblem = problemLanguage.test(`${existing?.details || ""} ${existing?.evidence || ""}`);
     if (candidateNamesProblem && !existingNamesProblem) blockersAndDelays[existingIndex] = item;
   };
   initialBlockers.forEach(addBlocker);
