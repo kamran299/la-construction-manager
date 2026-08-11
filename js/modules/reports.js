@@ -94,7 +94,8 @@ function renderStructuredReport(value) {
 
 function renderAnalysisItems(title, items, emptyText) {
   const rows = Array.isArray(items) ? items : [];
-  return `<section class="analysis-section${rows.length ? "" : " analysis-empty-section"}"><h3>${escapeHtml(title)}</h3>${rows.length ? `<ul>${rows.map((item) => `<li><div><strong>${escapeHtml(item.project || "General")}</strong><p>${escapeHtml(item.details)}</p></div><small>Reported by ${escapeHtml((item.reported_by || []).map(displayPersonName).join(", ") || "Unknown")}${item.source === "carryover" ? `<br><b>Carryover from ${escapeHtml(item.source_date || "prior day")}</b>` : ""}</small></li>`).join("")}</ul>` : `<p class="analysis-empty">${escapeHtml(emptyText)}</p>`}</section>`;
+  const printStyle = rows.length > 0 && rows.length <= 3 ? ' style="break-inside:avoid-page;page-break-inside:avoid"' : "";
+  return `<section class="analysis-section${rows.length ? (rows.length <= 3 ? " analysis-short-section" : "") : " analysis-empty-section"}"${printStyle}><h3>${escapeHtml(title)}</h3>${rows.length ? `<ul>${rows.map((item) => `<li><div><strong>${escapeHtml(item.project || "General")}</strong><p>${escapeHtml(item.details)}</p></div><small>Reported by ${escapeHtml((item.reported_by || []).map(displayPersonName).join(", ") || "Unknown")}${item.source === "carryover" ? `<br><b>Carryover from ${escapeHtml(item.source_date || "prior day")}</b>` : ""}</small></li>`).join("")}</ul>` : `<p class="analysis-empty">${escapeHtml(emptyText)}</p>`}</section>`;
 }
 
 function renderDailySummary(value) {

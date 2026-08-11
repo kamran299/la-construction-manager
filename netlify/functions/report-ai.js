@@ -2,7 +2,7 @@ function json(statusCode, body) {
   return new Response(JSON.stringify(body), { status: statusCode, headers: { "content-type": "application/json" } });
 }
 
-const REPORT_AI_VERSION = "2026-08-10-structured-v7";
+const REPORT_AI_VERSION = "2026-08-10-structured-v8";
 
 async function verifyUser(token, supabaseUrl, publicKey) {
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: publicKey, authorization: `Bearer ${token}` } });
@@ -20,12 +20,12 @@ function parseModelJson(text) {
 }
 
 const INCOMPLETE_WORK = /\b(start(?:ed|ing)?|began|beginning|underway|in progress|scheduled|planned|pending|will|to be)\b/i;
-const COMPLETION_EVIDENCE = /\b(completed?|finished|done|resolved|installed|delivered|passed|repaired|corrected|closed|removed|changed|widened|cleaned|compacted)\b/i;
+const COMPLETION_EVIDENCE = /\b(completed?|finished|done|resolved|installed|delivered|passed|repaired|corrected|closed|removed|changed|widened|cleaned|compacted|added|performed)\b/i;
 const MATERIAL_ACTION = /\b(order(?:ed|ing)?|buy|purchase(?:d|ing)?|procure(?:d|ment|ing)?|source|material(?:s)?\s+(?:needed|required|missing|insufficient))\b/i;
 const MATERIAL_ALREADY_AVAILABLE = /\b(delivered|received|purchased|bought|available|on[- ]?site|awaiting (?:pickup|installation)|waiting (?:for )?(?:pickup|installation))\b/i;
 const LABOR_NOT_YET_PERFORMED = /\b(will|scheduled|plans? to|pending|responsible for|to (?:pick|deliver|install|start|begin|return|come|reinstall))\b/i;
 const INSPECTION_EVIDENCE = /\b(inspect(?:ion|or|ed|ing)?|correction notice|sign[- ]?off)\b/i;
-const EXPLICIT_RISK = /\b(noise complaint|complaint.{0,30}noise|not wearing (?:helmets?|vests?|ppe)|without (?:helmets?|vests?|ppe)|safety (?:violation|hazard|concern|issue)|unsafe|injur(?:y|ed)|accident)\b/i;
+const EXPLICIT_RISK = /\b(risk|hazard|concern|noise complaint|complaint.{0,30}noise|not wearing (?:helmets?|vests?|ppe)|without (?:helmets?|vests?|ppe)|safety (?:violation|hazard|concern|issue)|unsafe|injur(?:y|ed)|accident)\b/i;
 const EXPLICIT_BLOCKER = /\b(incorrect(?:ly)?|wrong|not (?:right|correct)|damaged|broken|failed|missing|shortage|delay(?:ed)?|held up|cannot|can't|unable|stopped|blocked|retrofit|should (?:have been|be)|needs? (?:repair|replacement|correction|rework|return)|requires? (?:repair|replacement|correction|rework|epoxy|new rebar))\b/i;
 
 function inspectionKey(item) {
@@ -114,9 +114,9 @@ function mergeRelatedMaterialItems(items) {
 
 function completedClauses(value) {
   return String(value || "")
-    .split(/(?<=[.!?])\s+|;\s*/)
+    .split(/(?<=[.!?])\s+|;\s*|,\s+(?=and\s+there\b)/i)
     .map((part) => part.trim())
-    .filter((part) => part && !INCOMPLETE_WORK.test(part));
+    .filter((part) => part && COMPLETION_EVIDENCE.test(part) && !INCOMPLETE_WORK.test(part));
 }
 
 function atomicSummaryItems(item) {
@@ -221,7 +221,7 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
       addBlocker(item);
     });
   });
-  const risks = Array.isArray(summary.risks) ? [...summary.risks] : [];
+  const risks = (Array.isArray(summary.risks) ? summary.risks : []).filter((item) => EXPLICIT_RISK.test(`${item?.details || ""} ${item?.evidence || ""}`) || EXPLICIT_BLOCKER.test(`${item?.details || ""} ${item?.evidence || ""}`));
   const riskKeys = new Set(risks.map(riskKey));
   submittedReports.forEach((report) => {
     String(report?.report || "").split(/(?<=[.!?])\s+|[;\n]+/).map((part) => part.trim()).filter((part) => part && EXPLICIT_RISK.test(part)).forEach((evidence) => {
