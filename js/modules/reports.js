@@ -51,8 +51,11 @@ function dedupeInspectionsForDisplay(items) {
   items.forEach((item) => {
     const details = String(item?.details || "").trim();
     const time = details.match(/\b\d{1,2}:\d{2}\s*(?:AM|PM)\b/i)?.[0].toLowerCase();
+    const soilCompaction = /\b(soil|compaction)\b/i.test(details);
+    const status = details.match(/\b(passed|failed|conducted|requested|scheduled|follow[- ]?up)\b/i)?.[0].toLowerCase() || "noted";
     const key = time
       ? `${String(item?.project || "General").toLowerCase()}::inspection-time:${time}`
+      : soilCompaction ? `${String(item?.project || "General").toLowerCase()}::soil-compaction::${status}`
       : `${String(item?.project || "General").toLowerCase()}::${details.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()}`;
     const existing = unique.get(key);
     if (!existing || details.length > String(existing.details || "").length) unique.set(key, item);
