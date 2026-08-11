@@ -77,6 +77,34 @@ function emptySummary() {
   return { executive_summary: "", completed_work: [], blockers_and_delays: [], tomorrow_plan: [], labor: [], inspections: [], materials_needed: [], overdue_work: [], risks: [], contributors: [], resolved_prior_tasks: [] };
 }
 
+function taskStatusLabel(status) {
+  return status === "in_progress" ? "In progress" : status === "completed" ? "Completed" : "Open";
+}
+
+function renderPdfTask(task) {
+  const source = task.source === "manual" ? "Added manually" : `Reported by ${(task.reported_by || []).map(displayName).join(", ") || "Not specified"}`;
+  const date = task.due_date ? `Due ${task.due_date}` : `From ${task.source_date || task.latest_date || "Unknown date"}`;
+  return `<article class="pdf-task"><header><strong>${escapeHtml(task.project || "General")}</strong><span class="status status-${escapeHtml(task.status || "open")}">${escapeHtml(taskStatusLabel(task.status))}</span></header><p>${escapeHtml(task.details)}</p><div class="pdf-task-assignment"><b>Assigned to:</b> ${escapeHtml(task.assigned_to || "Unassigned")}</div><footer><span>${escapeHtml(source)}</span><span>${escapeHtml(date)}</span></footer>${task.completion_evidence ? `<small><b>Completion:</b> ${escapeHtml(task.completion_evidence)}</small>` : ""}</article>`;
+}
+
+function renderPdfTaskSection(title, subtitle, items, emptyText) {
+  return `<section class="pdf-task-section"><header><div><span>${escapeHtml(subtitle)}</span><h2>${escapeHtml(title)}</h2></div><strong>${items.length}</strong></header>${items.length ? items.map(renderPdfTask).join("") : `<p class="pdf-empty">${escapeHtml(emptyText)}</p>`}</section>`;
+}
+
+function printTasksPdf(tasks) {
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) throw new Error("Please allow pop-ups so the tasks PDF can open.");
+  const sorted = (items) => [...items].sort((left, right) => String(left.project || "General").localeCompare(String(right.project || "General")) || String(left.due_date || left.source_date || "").localeCompare(String(right.due_date || right.source_date || "")));
+  const open = sorted(tasks.filter((task) => task.status !== "completed" && !task.is_material));
+  const materials = sorted(tasks.filter((task) => task.status !== "completed" && task.is_material));
+  const completed = sorted(tasks.filter((task) => task.status === "completed"));
+  const body = `${renderPdfTaskSection("Work to do", "Action list", open, "No open work tasks were found.")}${renderPdfTaskSection("Materials to order", "Purchasing", materials, "No materials need to be ordered.")}${renderPdfTaskSection("Completed tasks", "History", completed, "No completed tasks were found.")}`;
+  printWindow.document.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Task Manager</title><style>
+    @page{size:letter;margin:.48in}*{box-sizing:border-box}body{margin:0;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-size:9.5pt;line-height:1.4}.print-button{position:fixed;right:18px;top:18px;border:0;border-radius:9px;background:#e96614;color:#fff;padding:11px 16px;font-weight:800}.pdf-heading{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #e96614;padding-bottom:13px;margin-bottom:17px}.brand{display:flex;align-items:center;gap:10px}.brand-mark{display:grid;place-items:center;width:44px;height:44px;border:2px solid #e96614;border-radius:12px;font-weight:900}.brand strong{display:block;font-size:15pt}.brand small,.pdf-heading>div:last-child{color:#667085}.pdf-heading>div:last-child{text-align:right}.pdf-heading h1{font-size:19pt;margin:3px 0}.pdf-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:16px}.pdf-summary div{padding:10px 12px;border:1px solid #dfe3ea;border-radius:10px}.pdf-summary span{display:block;color:#667085;font-size:8pt}.pdf-summary strong{font-size:16pt}.pdf-task-section{margin-bottom:15px}.pdf-task-section>header{display:flex;align-items:end;justify-content:space-between;border-bottom:2px solid #e96614;padding-bottom:6px;margin-bottom:8px;break-after:avoid-page}.pdf-task-section>header span{color:#e96614;font-size:7.5pt;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.pdf-task-section h2{margin:1px 0 0;font-size:14pt}.pdf-task-section>header>strong{font-size:16pt}.pdf-task{break-inside:avoid-page;border:1px solid #dfe3ea;border-radius:11px;padding:10px 12px;margin-bottom:7px}.pdf-task header,.pdf-task footer{display:flex;align-items:center;justify-content:space-between;gap:12px}.pdf-task p{margin:7px 0;color:#172033}.status{padding:3px 7px;border-radius:999px;font-size:7pt;font-weight:800}.status-open{color:#b54708;background:#fff4e5}.status-in_progress{color:#175cd3;background:#eff8ff}.status-completed{color:#087c4c;background:#ecfdf3}.pdf-task-assignment{margin-bottom:6px;color:#344054;font-size:8pt}.pdf-task footer{border-top:1px solid #e6e9ef;padding-top:6px;color:#667085;font-size:7.5pt}.pdf-task small{display:block;margin-top:5px;color:#087c4c}.pdf-empty{break-inside:avoid;padding:14px;border:1px dashed #cfd5df;border-radius:10px;color:#667085}.pdf-footer{border-top:1px solid #dfe3ea;margin-top:16px;padding-top:8px;color:#7a8497;font-size:8pt}@media print{.print-button{display:none}}
+  </style></head><body><button class="print-button" onclick="window.print()">Save as PDF</button><header class="pdf-heading"><div class="brand"><span class="brand-mark">L&amp;A</span><div><strong>Construction Manager</strong><small>Task Manager</small></div></div><div><h1>Tasks</h1><span>${escapeHtml(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }))}</span></div></header><section class="pdf-summary"><div><span>Open work</span><strong>${open.length}</strong></div><div><span>Materials to order</span><strong>${materials.length}</strong></div><div><span>Completed</span><strong>${completed.length}</strong></div></section>${body}<footer class="pdf-footer">Generated from L&amp;A Construction Manager</footer><script>setTimeout(()=>{window.focus();window.print()},350)<\/script></body></html>`);
+  printWindow.document.close();
+}
+
 export function createTasksModule({ supabase, companyId, canManage }) {
   const view = document.querySelector("#tasksView");
   const message = document.querySelector("#tasksMessage");
@@ -87,6 +115,7 @@ export function createTasksModule({ supabase, companyId, canManage }) {
   const workList = document.querySelector("#openTasksList");
   const materialList = document.querySelector("#materialTasksList");
   const completedList = document.querySelector("#completedTasksList");
+  const pdfButton = document.querySelector("#tasksPdfButton");
   let rows = [];
   let tasks = [];
   let manualTasks = [];
@@ -183,6 +212,11 @@ export function createTasksModule({ supabase, companyId, canManage }) {
       showMessage(field === "status" ? "Task status updated." : "Task assignment updated.");
       await load();
     } catch { showMessage("The task status could not be saved.", true); select.disabled = false; }
+  });
+
+  pdfButton.addEventListener("click", () => {
+    try { printTasksPdf(tasks); }
+    catch (error) { showMessage(error.message || "The tasks PDF could not be opened.", true); }
   });
 
   return { load };
