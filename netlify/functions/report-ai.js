@@ -2,7 +2,7 @@ function json(statusCode, body) {
   return new Response(JSON.stringify(body), { status: statusCode, headers: { "content-type": "application/json" } });
 }
 
-const REPORT_AI_VERSION = "2026-08-10-structured-v3";
+const REPORT_AI_VERSION = "2026-08-10-structured-v4";
 
 async function verifyUser(token, supabaseUrl, publicKey) {
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: publicKey, authorization: `Bearer ${token}` } });
@@ -288,7 +288,7 @@ Use an empty array for every category not explicitly mentioned.`;
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { authorization: `Bearer ${openaiKey}`, "content-type": "application/json" },
-    body: JSON.stringify({ model: Netlify.env.get("OPENAI_MODEL") || "gpt-4.1-mini", instructions, input, max_output_tokens: isSummary ? 8000 : 2500, ...(isSummary ? { text: { format: DAILY_SUMMARY_FORMAT } } : {}) }),
+    body: JSON.stringify({ model: Netlify.env.get("OPENAI_MODEL") || "gpt-4.1-mini", instructions, input, max_output_tokens: isSummary ? 4500 : 2500, ...(isSummary ? { text: { format: DAILY_SUMMARY_FORMAT } } : {}) }),
   });
   if (!response.ok) {
     const failure = await response.json().catch(() => ({}));
