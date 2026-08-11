@@ -2,7 +2,7 @@ function json(statusCode, body) {
   return new Response(JSON.stringify(body), { status: statusCode, headers: { "content-type": "application/json" } });
 }
 
-const REPORT_AI_VERSION = "2026-08-10-structured-v8";
+const REPORT_AI_VERSION = "2026-08-10-structured-v9";
 
 async function verifyUser(token, supabaseUrl, publicKey) {
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: publicKey, authorization: `Bearer ${token}` } });
@@ -104,7 +104,12 @@ function mergeRelatedMaterialItems(items) {
       && (/\b(?:low|high)[- ]?voltage\b/i.test(String(candidate?.details || ""))
         || /\b(?:client|customer)\b.{0,80}\b(?:purchase|buy|order)\b|\boriginal order\b.{0,50}\breturn(?:ed|ing)?\b/i.test(String(candidate?.details || ""))));
     group.forEach(({ candidateIndex }) => consumed.add(candidateIndex));
-    const uniqueDetails = [...new Map(group.map(({ candidate }) => [String(candidate.details || "").trim().toLowerCase(), String(candidate.details || "").trim().replace(/[.]$/, "")])).values()];
+    const fragments = [...new Map(group.flatMap(({ candidate }) => String(candidate.details || "").split(/[.;]\s*/)).map((part) => part.trim()).filter(Boolean).map((part) => [part.toLowerCase(), part])).values()];
+    const shortest = (matches) => [...matches].sort((left, right) => left.length - right.length)[0];
+    const voltageFragments = fragments.filter((part) => /\b(?:low|high)[- ]?voltage\b/i.test(part));
+    const pureVoltageFragments = voltageFragments.filter((part) => !/\b(?:client|customer|purchase|buy|original order|return(?:ed|ing)?)\b/i.test(part));
+    const selectedDetails = [shortest(pureVoltageFragments.length ? pureVoltageFragments : voltageFragments), shortest(fragments.filter((part) => /\b(?:client|customer)\b.{0,80}\b(?:purchase|buy|order)\b/i.test(part))), shortest(fragments.filter((part) => /\boriginal order\b.{0,50}\breturn(?:ed|ing)?\b/i.test(part)))].filter(Boolean);
+    const uniqueDetails = [...new Map(selectedDetails.map((part) => [part.toLowerCase(), part])).values()];
     const reportedBy = [...new Set(group.flatMap(({ candidate }) => candidate.reported_by || []))];
     const evidence = [...new Set(group.map(({ candidate }) => String(candidate.evidence || candidate.details || "").trim()).filter(Boolean))].join(" ");
     result.push({ ...item, details: `${uniqueDetails.join("; ")}.`, reported_by: reportedBy, evidence });
@@ -116,7 +121,13 @@ function completedClauses(value) {
   return String(value || "")
     .split(/(?<=[.!?])\s+|;\s*|,\s+(?=and\s+there\b)/i)
     .map((part) => part.trim())
-    .filter((part) => part && COMPLETION_EVIDENCE.test(part) && !INCOMPLETE_WORK.test(part));
+    .filter((part) => {
+      if (!part || !COMPLETION_EVIDENCE.test(part) || INCOMPLETE_WORK.test(part)) return false;
+      const unresolvedProblem = /\b(did not|was not|were not|incorrect(?:ly)?|not\b.{0,30}\bcorrect|there (?:is|was) an issue)\b/i.test(part);
+      const explicitlyResolved = /\b(resolved|corrected|repaired|fixed)\b/i.test(part);
+      const nonFieldContribution = /\b(?:contributed|shared|provided)\b.{0,50}\b(?:ideas?|details?|suggestions?)\b|\badded details\b/i.test(part);
+      return (!unresolvedProblem || explicitlyResolved) && !nonFieldContribution;
+    });
 }
 
 function atomicSummaryItems(item) {
@@ -141,7 +152,7 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
     return clauses.length ? [{ ...item, details: clauses.join(" ") }] : [];
   });
   submittedReports.forEach((report) => {
-    String(report?.report || "").split(/(?<=[.!?])\s+|[;\n]+/).map((part) => part.trim()).filter((part) => part && COMPLETION_EVIDENCE.test(part) && !INCOMPLETE_WORK.test(part)).forEach((evidence) => {
+    completedClauses(report?.report || "").forEach((evidence) => {
       const item = { project: report.project || "General", details: evidence, reported_by: [report.submitted_by].filter(Boolean), evidence };
       if (!summaryItemAlreadyIncluded(completedWork, item)) completedWork.push(item);
     });
