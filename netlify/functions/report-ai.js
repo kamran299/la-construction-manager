@@ -2,7 +2,7 @@ function json(statusCode, body) {
   return new Response(JSON.stringify(body), { status: statusCode, headers: { "content-type": "application/json" } });
 }
 
-const REPORT_AI_VERSION = "2026-08-10-structured-v10";
+const REPORT_AI_VERSION = "2026-08-13-structured-v11";
 
 async function verifyUser(token, supabaseUrl, publicKey) {
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: publicKey, authorization: `Bearer ${token}` } });
@@ -23,6 +23,9 @@ const INCOMPLETE_WORK = /\b(start(?:ed|ing)?|began|beginning|underway|in progres
 const COMPLETION_EVIDENCE = /\b(completed?|finished|done|resolved|installed|delivered|passed|repaired|corrected|closed|removed|changed|widened|cleaned|compacted|added|performed)\b/i;
 const MATERIAL_ACTION = /\b(order(?:ed|ing)?|buy|purchase(?:d|ing)?|procure(?:d|ment|ing)?|source|material(?:s)?\s+(?:needed|required|missing|insufficient))\b/i;
 const MATERIAL_ALREADY_AVAILABLE = /\b(delivered|received|purchased|bought|available|on[- ]?site|awaiting (?:pickup|installation)|waiting (?:for )?(?:pickup|installation))\b/i;
+const MATERIAL_CANCELLED = /\b(cancel(?:led|ed|ing)?|void(?:ed)?|no longer (?:needed|required)|do not order|don't order|return(?:ed|ing)? instead)\b/i;
+const MATERIAL_OBJECT_AFTER_ACTION = /\b(?:order(?:ed|ing)?|buy|purchase(?:d|ing)?|procure(?:d|ment|ing)?|source)\s+(?!(?:was|were|is|are|has|had|for|from|of|on|about|regarding|subject)\b)(?:the\s+|some\s+|more\s+|additional\s+)?[a-z0-9]/i;
+const MATERIAL_OBJECT_BEFORE_ACTION = /\b[a-z0-9][a-z0-9 /#&-]{1,60}\s+(?:ordered|purchased|procured|backordered|awaiting delivery|scheduled for delivery|expected to arrive)\b/i;
 const LABOR_NOT_YET_PERFORMED = /\b(will|scheduled|plans? to|pending|responsible for|to (?:pick|deliver|install|start|begin|return|come|reinstall))\b/i;
 const INSPECTION_EVIDENCE = /\b(inspect(?:ion|or|ed|ing)?|correction notice|sign[- ]?off)\b/i;
 const EXPLICIT_RISK = /\b(risk|hazard|concern|noise complaint|complaint.{0,30}noise|not wearing (?:helmets?|vests?|ppe)|without (?:helmets?|vests?|ppe)|safety (?:violation|hazard|concern|issue)|unsafe|injur(?:y|ed)|accident)\b/i;
@@ -81,10 +84,18 @@ function blockerKey(item) {
   return `${String(item?.project || "General").toLowerCase()}::${topic}`;
 }
 
+function isActionableMaterial(value) {
+  const details = String(value || "").trim();
+  if (!details || MATERIAL_CANCELLED.test(details)) return false;
+  return MATERIAL_OBJECT_AFTER_ACTION.test(details) || MATERIAL_OBJECT_BEFORE_ACTION.test(details)
+    || /\bmaterial(?:s)?\s+(?:needed|required|missing|insufficient)\b/i.test(details)
+    || /\b(?:needed|required|missing|insufficient|awaiting delivery|backordered)\b/i.test(details);
+}
+
 function materialNeedItems(item) {
   return String(item?.details || "").split(/;\s*|\s+and\s+(?=(?:purchased|bought|received|delivered)\b)/i).map((details) => ({ ...item, details: details.trim() })).filter((part) => {
     const details = part.details;
-    if (!details) return false;
+    if (!isActionableMaterial(details)) return false;
     const explicitlyPending = /\b(ordered|ordering|awaiting delivery|expected to arrive|not (?:yet )?received|backordered|must be ordered|needs? to be ordered)\b/i.test(details);
     const explicitlyAvailable = /\b(purchased|bought|received|delivered|available|on[- ]?site|payment made)\b/i.test(details);
     const moreRequired = /\b(more|additional|still)\b.{0,25}\b(needed|required|order)\b/i.test(details);
@@ -208,7 +219,7 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
     carryover_id: task.carryover_id,
   }));
   const finalTomorrowPlan = [...tomorrowPlan, ...requiredCarryovers];
-  const recoveredMaterials = submittedReports.flatMap((report) => String(report?.report || "").split(/(?<=[.!?])\s+|[;\n]+/).map((part) => part.trim()).filter((part) => part && ((MATERIAL_ACTION.test(part) && !MATERIAL_ALREADY_AVAILABLE.test(part)) || /\b(?:low|high)[- ]?voltage\b/i.test(part))).map((evidence) => ({
+  const recoveredMaterials = submittedReports.flatMap((report) => String(report?.report || "").split(/(?<=[.!?])\s+|[;\n]+/).map((part) => part.trim()).filter((part) => part && !MATERIAL_CANCELLED.test(part) && ((MATERIAL_ACTION.test(part) && !MATERIAL_ALREADY_AVAILABLE.test(part) && isActionableMaterial(part)) || /\b(?:low|high)[- ]?voltage\b/i.test(part))).map((evidence) => ({
     project: report.project || "General", details: evidence, reported_by: [report.submitted_by].filter(Boolean), evidence,
   })));
   const materialsNeeded = mergeRelatedMaterialItems([...(Array.isArray(summary.materials_needed) ? summary.materials_needed : []).flatMap(materialNeedItems), ...recoveredMaterials]);
@@ -260,13 +271,17 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
   });
   const resolvedTasks = priorTasks.filter((task) => resolvedIds.has(task.carryover_id));
   const overdueWork = (Array.isArray(summary.overdue_work) ? summary.overdue_work : []).filter((item) => !resolvedTasks.some((task) => sameProject(task.project, item.project) && sameTask(task.details, item.details)));
-  const finalMaterialMap = new Map();
+  const finalMaterialsNeeded = [];
   materialsNeeded.filter((item) => !/^\s*(order|buy|purchase|procure)\b/i.test(String(item.details || "")) || !resolvedTasks.some((task) => sameProject(task.project, item.project) && sameTask(task.details, item.details))).forEach((item) => {
-    const key = `${String(item.project || "General").toLowerCase()}::${materialKey(item.details)}`;
-    const existing = finalMaterialMap.get(key);
-    if (!existing || String(item.details || "").length < String(existing.details || "").length) finalMaterialMap.set(key, item);
+    if (!isActionableMaterial(item?.details)) return;
+    const existingIndex = finalMaterialsNeeded.findIndex((existing) => sameProject(existing?.project, item?.project)
+      && (materialKey(existing?.details) === materialKey(item?.details)
+        || sameTask(existing?.details, item?.details)
+        || sameTask(item?.details, existing?.details)));
+    if (existingIndex < 0) { finalMaterialsNeeded.push(item); return; }
+    const existing = finalMaterialsNeeded[existingIndex];
+    if (String(item.details || "").length < String(existing.details || "").length) finalMaterialsNeeded[existingIndex] = item;
   });
-  const finalMaterialsNeeded = [...finalMaterialMap.values()];
   return { ...summary, completed_work: completedWork, blockers_and_delays: blockersAndDelays, inspections, tomorrow_plan: finalTomorrowPlan, labor, materials_needed: finalMaterialsNeeded, overdue_work: overdueWork, risks, resolved_prior_tasks: resolvedPriorTasks };
 }
 

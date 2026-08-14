@@ -362,6 +362,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     });
     const { data: saved } = await supabase.from("daily_report_summaries").select("english_summary").eq("company_id", companyId).eq("report_date", filterDate.value).maybeSingle();
     savedSummaryValue = saved?.english_summary || "";
+    summary.innerHTML = "";
     summary.hidden = !saved;
     if (saved) summary.innerHTML = renderDailySummary(saved.english_summary);
     setPdfAvailability();
