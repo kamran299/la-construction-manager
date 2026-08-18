@@ -2,7 +2,34 @@ function json(statusCode, body) {
   return new Response(JSON.stringify(body), { status: statusCode, headers: { "content-type": "application/json" } });
 }
 
-const REPORT_AI_VERSION = "2026-08-13-structured-v11";
+const REPORT_AI_VERSION = "2026-08-17-usage-v12";
+
+const TEXT_MODEL_PRICING = [
+  { pattern: /^gpt-4\.1-mini(?:-|$)/i, input: 0.40, cachedInput: 0.10, output: 1.60 },
+];
+
+function aiUsage(responseData, model, operation, durationMs) {
+  const usage = responseData?.usage || {};
+  const inputTokens = Number(usage.input_tokens) || 0;
+  const cachedInputTokens = Math.min(inputTokens, Number(usage.input_tokens_details?.cached_tokens) || 0);
+  const outputTokens = Number(usage.output_tokens) || 0;
+  const totalTokens = Number(usage.total_tokens) || inputTokens + outputTokens;
+  const pricing = TEXT_MODEL_PRICING.find((entry) => entry.pattern.test(model));
+  const estimatedCostUsd = pricing
+    ? (((inputTokens - cachedInputTokens) * pricing.input) + (cachedInputTokens * pricing.cachedInput) + (outputTokens * pricing.output)) / 1_000_000
+    : null;
+  return {
+    provider: "OpenAI",
+    operation,
+    model,
+    input_tokens: inputTokens,
+    cached_input_tokens: cachedInputTokens,
+    output_tokens: outputTokens,
+    total_tokens: totalTokens,
+    estimated_cost_usd: estimatedCostUsd === null ? null : Number(estimatedCostUsd.toFixed(8)),
+    duration_ms: Math.max(0, Number(durationMs) || 0),
+  };
+}
 
 async function verifyUser(token, supabaseUrl, publicKey) {
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: publicKey, authorization: `Bearer ${token}` } });
@@ -285,7 +312,7 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
   return { ...summary, completed_work: completedWork, blockers_and_delays: blockersAndDelays, inspections, tomorrow_plan: finalTomorrowPlan, labor, materials_needed: finalMaterialsNeeded, overdue_work: overdueWork, risks, resolved_prior_tasks: resolvedPriorTasks };
 }
 
-export { sanitizeSummary };
+export { aiUsage, sanitizeSummary };
 
 const CONSTRUCTION_GLOSSARY = `
 Apply this L&A Custom Homes glossary exactly:
@@ -347,7 +374,7 @@ Classification rules:
 - Inspections contains only an actual inspection, inspector visit, inspection result, correction notice, or explicitly requested inspection. Do not turn a generic check, installation, removal, reinstallation, repair, or Monday work into an inspection.
 - Overdue work requires explicit evidence that work is late, missed, overdue, unfinished past its expected time, or carried over. A general blocker is not automatically overdue.
 - Risks contains only the actual risk, hazard, complaint, or concern. Describe it in natural management English. Never call enforcement, PPE use, a safety meeting, or another corrective action a "safety risk"; include a corrective action only after naming an explicit underlying hazard or noncompliance.
-- Prior open action items are the still-unresolved tasks reconstructed chronologically from all earlier daily summaries, not only the previous day. Remove one only when today's submitted reports explicitly confirm that same task was completed. List such confirmations in resolved_prior_tasks using the exact carryover_id and an exact completion excerpt from today's report. If it is not mentioned, is ambiguous, remains pending, or is only underway, include it in tomorrow_plan with source "carryover", the same carryover_id, and its original source_date. Never treat silence as completion.
+- Prior open action items are the still-unresolved tasks reconstructed chronologically from all earlier daily summaries, not only the previous day. Use them only to identify tasks explicitly completed today. List those confirmations in resolved_prior_tasks using the exact carryover_id and an exact completion excerpt from today's report. The backend appends every unresolved carryover automatically, so do not repeat unresolved prior tasks in tomorrow_plan. Never treat silence as completion.
 - New explicit next steps from today's reports go in tomorrow_plan with source "today" and source_date set to the submitted report date.
 Return only valid JSON with exactly this structure:
 {
@@ -376,14 +403,32 @@ Never invent, infer, or fill in missing facts. A task that only started, began, 
   "inspection": ["Inspection status, result, correction, or explicitly requested inspection"]
 }
 Use an empty array for every category not explicitly mentioned.`;
-  const input = isSummary ? JSON.stringify({ report_date: body.report_date || null, reports: body.reports || [], prior_open_tasks: body.prior_open_tasks || [] }) : String(body.text || "");
+  const priorOpenTasks = Array.isArray(body.prior_open_tasks) ? body.prior_open_tasks : [];
+  const input = isSummary ? JSON.stringify({
+    report_date: body.report_date || null,
+    reports: body.reports || [],
+    prior_open_tasks: priorOpenTasks.map((task) => ({ carryover_id: task.carryover_id, project: task.project, details: task.details })),
+  }) : String(body.text || "");
   if (!input.trim()) return json(400, { error: "Report text is required" });
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: { authorization: `Bearer ${openaiKey}`, "content-type": "application/json" },
-    body: JSON.stringify({ model: Netlify.env.get("OPENAI_MODEL") || "gpt-4.1-mini", instructions, input, max_output_tokens: isSummary ? 4500 : 2500, ...(isSummary ? { text: { format: DAILY_SUMMARY_FORMAT } } : {}) }),
-  });
+  const model = Netlify.env.get("OPENAI_MODEL") || "gpt-4.1-mini";
+  const startedAt = Date.now();
+  let response;
+  try {
+    response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { authorization: `Bearer ${openaiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({ model, instructions, input, max_output_tokens: isSummary ? 3000 : 1800, ...(isSummary ? { text: { format: DAILY_SUMMARY_FORMAT } } : {}) }),
+      signal: AbortSignal.timeout(isSummary ? 50_000 : 35_000),
+    });
+  } catch (error) {
+    const timedOut = error?.name === "TimeoutError" || error?.name === "AbortError";
+    console.error("OpenAI report request failed", timedOut ? "timeout" : (error?.message || "network_error"));
+    return json(timedOut ? 504 : 502, {
+      error: timedOut ? (isSummary ? "The 5 PM analysis exceeded 50 seconds. Please try again." : "AI report processing timed out. Please try again.") : "The AI service could not be reached. Please try again.",
+      error_code: timedOut ? "openai_timeout" : "openai_network_error",
+    });
+  }
   if (!response.ok) {
     const failure = await response.json().catch(() => ({}));
     const errorCode = failure?.error?.code || failure?.error?.type || `openai_${response.status}`;
@@ -393,10 +438,11 @@ Use an empty array for every category not explicitly mentioned.`;
   const responseData = await response.json().catch(() => null);
   const text = outputText(responseData || {}).trim();
   if (!text) return json(502, { error: "The AI service returned an empty response. Please try again." });
+  const usage = aiUsage(responseData, model, isSummary ? "5_pm_summary" : "daily_report", Date.now() - startedAt);
   if (isSummary) {
     try {
-      const dailySummary = sanitizeSummary(parseModelJson(text), body.prior_open_tasks || [], body.reports || []);
-      return json(200, { daily_summary: dailySummary, english_summary: JSON.stringify(dailySummary), processing_version: REPORT_AI_VERSION });
+      const dailySummary = sanitizeSummary(parseModelJson(text), priorOpenTasks, body.reports || []);
+      return json(200, { daily_summary: dailySummary, english_summary: JSON.stringify(dailySummary), ai_usage: usage, processing_version: REPORT_AI_VERSION });
     } catch (error) {
       console.error("Daily analysis JSON failed", error?.message || "Unknown parsing error");
       return json(502, { error: "The daily analysis could not be structured. Please try again.", error_code: "invalid_summary_json" });
@@ -404,7 +450,7 @@ Use an empty array for every category not explicitly mentioned.`;
   }
   try {
     const report = sanitizeReport(parseModelJson(text));
-    return json(200, { ...report, structured_report: report, processing_version: REPORT_AI_VERSION });
+    return json(200, { ...report, structured_report: report, ai_usage: usage, processing_version: REPORT_AI_VERSION });
   } catch {
     return json(502, { error: "The AI report could not be structured. Please try again." });
   }

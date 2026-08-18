@@ -16,6 +16,57 @@ function displayPersonName(value) {
   return name.toLowerCase().replace(/(^|[\s'-])([a-z])/g, (_, prefix, letter) => `${prefix}${letter.toUpperCase()}`);
 }
 
+function usageComponents(value) {
+  if (!value || typeof value !== "object") return [];
+  return Array.isArray(value.components) ? value.components.flatMap(usageComponents) : [value];
+}
+
+function combineAiUsage(...values) {
+  const components = values.flatMap(usageComponents).filter((usage) => usage.total_tokens || usage.audio_seconds || usage.estimated_cost_usd);
+  if (!components.length) return null;
+  const priced = components.every((usage) => usage.estimated_cost_usd !== null && usage.estimated_cost_usd !== undefined && Number.isFinite(Number(usage.estimated_cost_usd)));
+  return {
+    provider: "OpenAI",
+    operation: "daily_report_total",
+    model: [...new Set(components.map((usage) => usage.model).filter(Boolean))].join(" + "),
+    input_tokens: components.reduce((sum, usage) => sum + (Number(usage.input_tokens) || 0), 0),
+    cached_input_tokens: components.reduce((sum, usage) => sum + (Number(usage.cached_input_tokens) || 0), 0),
+    output_tokens: components.reduce((sum, usage) => sum + (Number(usage.output_tokens) || 0), 0),
+    total_tokens: components.reduce((sum, usage) => sum + (Number(usage.total_tokens) || 0), 0),
+    audio_seconds: components.reduce((sum, usage) => sum + (Number(usage.audio_seconds) || 0), 0),
+    estimated_cost_usd: priced ? Number(components.reduce((sum, usage) => sum + Number(usage.estimated_cost_usd), 0).toFixed(8)) : null,
+    duration_ms: components.reduce((sum, usage) => sum + (Number(usage.duration_ms) || 0), 0),
+    components,
+  };
+}
+
+function formatAiUsage(value) {
+  if (!value || typeof value !== "object") return "";
+  const tokens = Number(value.total_tokens) || 0;
+  const seconds = Number(value.audio_seconds) || 0;
+  const hasCost = value.estimated_cost_usd !== null && value.estimated_cost_usd !== undefined && Number.isFinite(Number(value.estimated_cost_usd));
+  const cost = hasCost ? Number(value.estimated_cost_usd) : null;
+  const parts = [];
+  if (tokens) parts.push(`${tokens.toLocaleString()} token${tokens === 1 ? "" : "s"}`);
+  if (!tokens && seconds) parts.push(`${seconds.toFixed(1)} audio seconds`);
+  if (cost !== null) parts.push(`estimated $${cost < 0.0001 ? cost.toFixed(6) : cost.toFixed(4)}`);
+  return parts.join(" · ");
+}
+
+function renderAiUsage(value, history = []) {
+  const label = formatAiUsage(value);
+  if (!label) return "";
+  const input = Number(value.input_tokens) || 0;
+  const output = Number(value.output_tokens) || 0;
+  const model = value.model || "OpenAI";
+  const trackedRuns = Array.isArray(history) ? history : [];
+  const historyCost = trackedRuns.length && trackedRuns.every((item) => item?.estimated_cost_usd !== null && item?.estimated_cost_usd !== undefined)
+    ? trackedRuns.reduce((sum, item) => sum + (Number(item.estimated_cost_usd) || 0), 0)
+    : null;
+  const historyLabel = trackedRuns.length > 1 ? ` · ${trackedRuns.length} summary runs tracked${historyCost === null ? "" : `, $${historyCost.toFixed(4)} total`}` : "";
+  return `<div class="ai-usage" title="${escapeHtml(`${model}: ${input} input tokens, ${output} output tokens`)}"><strong>AI usage</strong><span>${escapeHtml(`${label}${historyLabel}`)}</span></div>`;
+}
+
 function materialDisplayKey(item) {
   const ignored = new Set(["a", "an", "the", "to", "be", "is", "are", "was", "were", "must", "should", "for", "material", "materials", "need", "needed", "needs", "require", "required", "missing", "insufficient", "order", "ordered", "ordering", "buy", "purchase", "purchased", "purchasing", "procure", "procured", "procurement", "procuring", "source"]);
   const words = String(item?.details || "").toLowerCase().match(/[a-z0-9]+/g)?.filter((word) => !ignored.has(word)).sort().join(" ") || "";
@@ -104,6 +155,7 @@ function renderDailySummary(value) {
   const analysis = sanitizeAnalysisForDisplay(parsedAnalysis);
   const contributors = Array.isArray(analysis.contributors) ? analysis.contributors : [];
   return `<header class="analysis-header"><div><span>AI DAILY ANALYSIS</span><h2>End-of-day management report</h2></div><strong>${contributors.length} contributor${contributors.length === 1 ? "" : "s"}</strong></header>
+    ${renderAiUsage(analysis.ai_usage, analysis.ai_usage_history)}
     <section class="analysis-overview"><h3>Executive summary</h3><p>${escapeHtml(analysis.executive_summary || "No overall conclusion was available.")}</p></section>
     ${renderAnalysisItems("Work completed", analysis.completed_work, "No completed work was reported.")}
     ${renderAnalysisItems("Blockers and delays", analysis.blockers_and_delays, "No blockers or delays were reported.")}
@@ -159,6 +211,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
   let microphoneStream = null;
   let audioChunks = [];
   let savedSummaryValue = "";
+  let pendingVoiceUsage = null;
 
   function projectFor(report) { return projects.find((project) => project.id === report.project_id); }
 
@@ -228,6 +281,8 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     const spokenText = String(data.text || "").trim();
     if (!spokenText) throw new Error("No speech was detected. Please try again.");
     const translated = await callAi({ action: "translate", text: spokenText });
+    pendingVoiceUsage = combineAiUsage(pendingVoiceUsage, data.ai_usage, translated.ai_usage);
+    translated.ai_usage = pendingVoiceUsage;
     const englishText = String(translated.english_text || "").trim();
     if (!englishText) throw new Error("The voice report could not be translated to English.");
     reportText.value = [reportText.value.trim(), englishText].filter(Boolean).join("\n");
@@ -355,7 +410,8 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     list.innerHTML = reports.length ? reports.map((r) => {
       const project = projects.find((p) => p.id === r.project_id);
       const canDelete = canManage || r.reporter_id === session.user.id;
-      return `<article class="workspace-card report-card"><header><div><strong>${escapeHtml(r.reporter_name)}</strong><small>${escapeHtml(r.reporter_email || "")}</small></div><div class="report-card-actions"><span>${escapeHtml(project?.name || "General")}</span>${canDelete ? `<button class="report-delete-button" type="button" data-delete-report="${r.id}">Delete</button>` : ""}</div></header><div class="report-english report-english-only"><p>${escapeHtml(r.english_text)}</p>${renderStructuredReport(r.english_summary)}</div></article>`;
+      const structured = parseDailySummary(r.english_summary);
+      return `<article class="workspace-card report-card"><header><div><strong>${escapeHtml(r.reporter_name)}</strong><small>${escapeHtml(r.reporter_email || "")}</small></div><div class="report-card-actions"><span>${escapeHtml(project?.name || "General")}</span>${canDelete ? `<button class="report-delete-button" type="button" data-delete-report="${r.id}">Delete</button>` : ""}</div></header><div class="report-english report-english-only"><p>${escapeHtml(r.english_text)}</p>${renderStructuredReport(r.english_summary)}${renderAiUsage(structured?.ai_usage)}</div></article>`;
     }).join("") : '<div class="empty-projects">No reports were submitted for this date.</div>';
     list.querySelectorAll("[data-delete-report]").forEach((button) => {
       button.addEventListener("click", () => deleteReport(button.dataset.deleteReport, button));
@@ -396,9 +452,14 @@ export function createReportsModule({ supabase, session, companyId, membership, 
       const translated = await callAi({ action: "translate", text });
       const name = membership.full_name || session.user.user_metadata?.full_name || session.user.email.split("@")[0];
       const structuredReport = translated.structured_report || translated;
+      structuredReport.ai_usage = translated.ai_usage || null;
       const { error } = await supabase.from("daily_reports").insert({ company_id: companyId, project_id: projectSelect.value || null, reporter_id: session.user.id, reporter_name: name, reporter_email: membership.email || session.user.email, report_date: reportDate.value, original_text: text, english_text: translated.english_text, english_summary: JSON.stringify(structuredReport) });
       if (error) throw error;
       reportText.value = ""; filterDate.value = reportDate.value; await loadReports();
+      pendingVoiceUsage = null;
+      message.textContent = `Report saved successfully.${formatAiUsage(structuredReport.ai_usage) ? ` AI usage: ${formatAiUsage(structuredReport.ai_usage)}.` : ""}`;
+      message.classList.remove("message-error");
+      message.hidden = false;
     } catch (error) { message.textContent = error.message || "The report could not be saved."; message.classList.add("message-error"); message.hidden = false; }
     finally { button.disabled = false; button.textContent = "Save report"; }
   });
@@ -413,17 +474,20 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     try {
       const priorOpenTasks = await loadPriorOpenTasks();
       summaryStage = "AI analysis";
-      const data = await callAi({ action: "summarize", report_date: filterDate.value, prior_open_tasks: priorOpenTasks, reports: reports.map((r) => ({ report_date: r.report_date, submitted_by: r.reporter_name, project: projects.find((p) => p.id === r.project_id)?.name || "General", report: r.english_text })) }, { retryGatewayTimeout: true });
+      const data = await callAi({ action: "summarize", report_date: filterDate.value, prior_open_tasks: priorOpenTasks, reports: reports.map((r) => ({ report_date: r.report_date, submitted_by: r.reporter_name, project: projects.find((p) => p.id === r.project_id)?.name || "General", report: r.english_text })) });
       message.textContent = "AI analysis finished. Saving the 5 PM summary...";
       const generatedSummary = data.daily_summary && typeof data.daily_summary === "object" ? data.daily_summary : (parseDailySummary(data.english_summary) || {});
       const existingSummary = parseDailySummary(savedSummaryValue) || {};
       generatedSummary.manual_tasks = existingSummary.manual_tasks || [];
       generatedSummary.task_overrides = existingSummary.task_overrides || {};
+      generatedSummary.ai_usage = data.ai_usage || null;
+      const previousUsage = Array.isArray(existingSummary.ai_usage_history) ? existingSummary.ai_usage_history : (existingSummary.ai_usage ? [existingSummary.ai_usage] : []);
+      generatedSummary.ai_usage_history = data.ai_usage ? [...previousUsage, { ...data.ai_usage, generated_at: new Date().toISOString() }].slice(-50) : previousUsage;
       summaryStage = "Saving to Supabase";
       const { error } = await supabase.from("daily_report_summaries").upsert({ company_id: companyId, report_date: filterDate.value, english_summary: JSON.stringify(generatedSummary), generated_by: session.user.id, updated_at: new Date().toISOString() }, { onConflict: "company_id,report_date" });
       if (error) throw error;
       await loadReports();
-      message.textContent = "5 PM summary created successfully.";
+      message.textContent = `5 PM summary created successfully.${formatAiUsage(generatedSummary.ai_usage) ? ` AI usage: ${formatAiUsage(generatedSummary.ai_usage)}.` : ""}`;
       message.classList.remove("message-error");
       message.hidden = false;
     } catch (error) { message.textContent = `${summaryStage}: ${error.message || "The summary could not be created."}`; message.classList.add("message-error"); message.hidden = false; }

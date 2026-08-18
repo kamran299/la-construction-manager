@@ -21,6 +21,32 @@ L&A Custom Homes vocabulary for Persian/English field reports:
 - inspection (اینزپکشن), correction notice (کورکشن نوتیس), punch list (پانچ‌لیست), change order (چنج اوردر), RFI, submittal, material delivery (متریال دلیوری), subcontractor/sub (ساب‌کانترکتور/ساب), superintendent (سوپرینتندنت), foreman (فورمن), crew (کرو).
 Preserve all people, company and project names, addresses, dates, times, measurements and quantities exactly. If a word may be a person's name or an unfamiliar construction term, transcribe it phonetically instead of replacing it with unrelated equipment or work.`;
 
+function transcriptionUsage(data, model, durationMs) {
+  const usage = data?.usage || {};
+  const inputTokens = Number(usage.input_tokens) || 0;
+  const outputTokens = Number(usage.output_tokens) || 0;
+  const totalTokens = Number(usage.total_tokens) || inputTokens + outputTokens;
+  const seconds = Number(usage.seconds) || 0;
+  let estimatedCostUsd = null;
+  if (/^gpt-4o-mini-transcribe(?:-|$)/i.test(model)) {
+    estimatedCostUsd = ((inputTokens * 1.25) + (outputTokens * 5.00)) / 1_000_000;
+  } else if (/^whisper-1$/i.test(model) && seconds > 0) {
+    estimatedCostUsd = (seconds / 60) * 0.006;
+  }
+  return {
+    provider: "OpenAI",
+    operation: "voice_transcription",
+    model,
+    input_tokens: inputTokens,
+    cached_input_tokens: 0,
+    output_tokens: outputTokens,
+    total_tokens: totalTokens,
+    audio_seconds: seconds,
+    estimated_cost_usd: estimatedCostUsd === null ? null : Number(estimatedCostUsd.toFixed(8)),
+    duration_ms: Math.max(0, Number(durationMs) || 0),
+  };
+}
+
 async function transcribe(openaiKey, audio, model) {
   const body = new FormData();
   body.append("file", audio, audio.name || "persian-report.webm");
@@ -49,11 +75,16 @@ export default async (request) => {
     if (audio.size > 4 * 1024 * 1024) return json(413, { error: "The recording is too long. Please record a shorter report." });
 
     const configuredModel = Netlify.env.get("OPENAI_TRANSCRIBE_MODEL") || "gpt-4o-mini-transcribe";
+    let usedModel = configuredModel;
+    const startedAt = Date.now();
     let response = await transcribe(openaiKey, audio, configuredModel);
-    if (!response.ok && configuredModel !== "whisper-1") response = await transcribe(openaiKey, audio, "whisper-1");
+    if (!response.ok && configuredModel !== "whisper-1") {
+      usedModel = "whisper-1";
+      response = await transcribe(openaiKey, audio, usedModel);
+    }
     if (!response.ok) return json(502, { error: "Voice transcription is temporarily unavailable" });
     const data = await response.json();
-    return json(200, { text: String(data.text || "").trim() });
+    return json(200, { text: String(data.text || "").trim(), ai_usage: transcriptionUsage(data, usedModel, Date.now() - startedAt) });
   } catch {
     return json(400, { error: "The voice recording could not be processed" });
   }
