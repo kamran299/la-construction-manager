@@ -102,16 +102,74 @@ function renderPdfTaskSection(title, subtitle, items, emptyText) {
 }
 
 function printTasksPdf(tasks) {
-  const printWindow = window.open("", "_blank");
-  if (!printWindow) throw new Error("Please allow pop-ups so the tasks PDF can open.");
   const sorted = (items) => [...items].sort((left, right) => String(left.project || "General").localeCompare(String(right.project || "General")) || String(left.due_date || left.source_date || "").localeCompare(String(right.due_date || right.source_date || "")));
   const open = sorted(tasks.filter((task) => task.status !== "completed" && !task.is_material));
   const materials = sorted(tasks.filter((task) => task.status !== "completed" && task.is_material));
   const body = `${renderPdfTaskSection("Work to do", "Action list", open, "No open work tasks were found.")}${renderPdfTaskSection("Materials to order", "Purchasing", materials, "No materials need to be ordered.")}`;
-  printWindow.document.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Task Manager</title><style>
-    @page{size:letter;margin:.42in}*{box-sizing:border-box}body{margin:0;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-size:8.8pt;line-height:1.3}.print-button{position:fixed;right:18px;top:18px;border:0;border-radius:9px;background:#e96614;color:#fff;padding:11px 16px;font-weight:800}.pdf-heading{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #e96614;padding-bottom:10px;margin-bottom:12px}.brand{display:flex;align-items:center;gap:9px}.brand-mark{display:grid;place-items:center;width:40px;height:40px;border:2px solid #e96614;border-radius:11px;font-weight:900}.brand strong{display:block;font-size:14pt}.brand small,.pdf-heading>div:last-child{color:#667085}.pdf-heading>div:last-child{text-align:right}.pdf-heading h1{font-size:18pt;margin:2px 0}.pdf-summary{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-bottom:11px}.pdf-summary div{padding:7px 10px;border:1px solid #dfe3ea;border-radius:9px}.pdf-summary span{color:#667085;font-size:7.5pt}.pdf-summary strong{float:right;font-size:12pt}.pdf-task-section{margin-bottom:11px}.pdf-task-section>header{display:flex;align-items:end;justify-content:space-between;border-bottom:2px solid #e96614;padding-bottom:4px;margin-bottom:5px;break-after:avoid-page}.pdf-task-section>header span{color:#e96614;font-size:7pt;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.pdf-task-section h2{margin:0;font-size:12.5pt}.pdf-task-section>header>strong{font-size:13pt}.pdf-project{margin:0 0 6px;break-inside:auto}.pdf-project h3{margin:0;padding:4px 7px;background:#f1f3f6;border-left:3px solid #e96614;font-size:9pt;break-after:avoid-page}.pdf-project ul{list-style:none;margin:0;padding:0 5px}.pdf-project li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:12px;padding:4px 2px;border-bottom:1px solid #e6e9ef;break-inside:avoid-page}.pdf-project li:last-child{border-bottom:0}.task-text:before{content:"• ";color:#e96614;font-weight:900}.task-meta{white-space:nowrap;color:#667085;font-size:7.2pt}.status-text{font-weight:800}.status-text-open{color:#b54708}.status-text-in_progress{color:#175cd3}.pdf-empty{break-inside:avoid;padding:10px;border:1px dashed #cfd5df;border-radius:9px;color:#667085}.pdf-footer{border-top:1px solid #dfe3ea;margin-top:11px;padding-top:6px;color:#7a8497;font-size:7.5pt}@media print{.print-button{display:none}}
-  </style></head><body><button class="print-button" onclick="window.print()">Save as PDF</button><header class="pdf-heading"><div class="brand"><span class="brand-mark">L&amp;A</span><div><strong>Construction Manager</strong><small>Task Manager</small></div></div><div><h1>Tasks</h1><span>${escapeHtml(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }))}</span></div></header><section class="pdf-summary"><div><span>Open work</span><strong>${open.length}</strong></div><div><span>Materials to order</span><strong>${materials.length}</strong></div></section>${body}<footer class="pdf-footer">Generated from L&amp;A Construction Manager</footer><script>setTimeout(()=>{window.focus();window.print()},350)<\/script></body></html>`);
-  printWindow.document.close();
+  document.querySelector(".tasks-print-sheet")?.remove();
+  document.querySelector("#tasksPrintStyle")?.remove();
+
+  const printStyle = document.createElement("style");
+  printStyle.id = "tasksPrintStyle";
+  printStyle.textContent = `
+    @page{size:letter;margin:.42in}
+    @media screen{.tasks-print-sheet{display:none}}
+    @media print{
+      body.tasks-printing>*:not(.tasks-print-sheet){display:none!important}
+      .tasks-print-sheet{display:block!important;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-size:8.8pt;line-height:1.3}
+      .tasks-print-sheet *{box-sizing:border-box}
+      .tasks-print-sheet .pdf-heading{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #e96614;padding-bottom:10px;margin-bottom:12px}
+      .tasks-print-sheet .brand{display:flex;align-items:center;gap:9px}
+      .tasks-print-sheet .brand-mark{display:grid;place-items:center;width:40px;height:40px;border:2px solid #e96614;border-radius:11px;font-weight:900}
+      .tasks-print-sheet .brand strong{display:block;font-size:14pt}
+      .tasks-print-sheet .brand small,.tasks-print-sheet .pdf-heading>div:last-child{color:#667085}
+      .tasks-print-sheet .pdf-heading>div:last-child{text-align:right}
+      .tasks-print-sheet .pdf-heading h1{font-size:18pt;margin:2px 0}
+      .tasks-print-sheet .pdf-summary{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-bottom:11px}
+      .tasks-print-sheet .pdf-summary div{padding:7px 10px;border:1px solid #dfe3ea;border-radius:9px}
+      .tasks-print-sheet .pdf-summary span{color:#667085;font-size:7.5pt}
+      .tasks-print-sheet .pdf-summary strong{float:right;font-size:12pt}
+      .tasks-print-sheet .pdf-task-section{margin-bottom:11px}
+      .tasks-print-sheet .pdf-task-section>header{display:flex;align-items:end;justify-content:space-between;border-bottom:2px solid #e96614;padding-bottom:4px;margin-bottom:5px;break-after:avoid-page}
+      .tasks-print-sheet .pdf-task-section>header span{color:#e96614;font-size:7pt;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+      .tasks-print-sheet .pdf-task-section h2{margin:0;font-size:12.5pt}
+      .tasks-print-sheet .pdf-task-section>header>strong{font-size:13pt}
+      .tasks-print-sheet .pdf-project{margin:0 0 6px;break-inside:auto}
+      .tasks-print-sheet .pdf-project h3{margin:0;padding:4px 7px;background:#f1f3f6;border-left:3px solid #e96614;font-size:9pt;break-after:avoid-page}
+      .tasks-print-sheet .pdf-project ul{list-style:none;margin:0;padding:0 5px}
+      .tasks-print-sheet .pdf-project li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:12px;padding:4px 2px;border-bottom:1px solid #e6e9ef;break-inside:avoid-page}
+      .tasks-print-sheet .pdf-project li:last-child{border-bottom:0}
+      .tasks-print-sheet .task-text:before{content:"• ";color:#e96614;font-weight:900}
+      .tasks-print-sheet .task-meta{white-space:nowrap;color:#667085;font-size:7.2pt}
+      .tasks-print-sheet .status-text{font-weight:800}
+      .tasks-print-sheet .status-text-open{color:#b54708}
+      .tasks-print-sheet .status-text-in_progress{color:#175cd3}
+      .tasks-print-sheet .pdf-empty{break-inside:avoid;padding:10px;border:1px dashed #cfd5df;border-radius:9px;color:#667085}
+      .tasks-print-sheet .pdf-footer{border-top:1px solid #dfe3ea;margin-top:11px;padding-top:6px;color:#7a8497;font-size:7.5pt}
+    }`;
+
+  const printSheet = document.createElement("section");
+  printSheet.className = "tasks-print-sheet";
+  printSheet.setAttribute("aria-hidden", "true");
+  printSheet.innerHTML = `<header class="pdf-heading"><div class="brand"><span class="brand-mark">L&amp;A</span><div><strong>Construction Manager</strong><small>Task Manager</small></div></div><div><h1>Tasks</h1><span>${escapeHtml(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }))}</span></div></header><section class="pdf-summary"><div><span>Open work</span><strong>${open.length}</strong></div><div><span>Materials to order</span><strong>${materials.length}</strong></div></section>${body}<footer class="pdf-footer">Generated from L&amp;A Construction Manager</footer>`;
+
+  const cleanUpPrintSheet = () => {
+    document.body.classList.remove("tasks-printing");
+    printSheet.remove();
+    printStyle.remove();
+  };
+  window.addEventListener("afterprint", cleanUpPrintSheet, { once: true });
+  window.setTimeout(cleanUpPrintSheet, 120000);
+  document.head.appendChild(printStyle);
+  document.body.appendChild(printSheet);
+  document.body.classList.add("tasks-printing");
+  try {
+    window.focus();
+    window.print();
+  } catch (error) {
+    cleanUpPrintSheet();
+    throw error;
+  }
 }
 
 export function createTasksModule({ supabase, companyId, canManage }) {
