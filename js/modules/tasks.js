@@ -1,3 +1,5 @@
+import { downloadTasksPdf } from "./task-pdf.js";
+
 function escapeHtml(value) { return String(value || "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character]); }
 function parseSummary(value) { try { return JSON.parse(value); } catch { return null; } }
 function today() { return new Date().toLocaleDateString("en-CA"); }
@@ -282,8 +284,10 @@ export function createTasksModule({ supabase, companyId, canManage }) {
   });
 
   pdfButton.addEventListener("click", () => {
-    try { printTasksPdf(tasks); }
-    catch (error) { showMessage(error.message || "The tasks PDF could not be opened.", true); }
+    try {
+      downloadTasksPdf(tasks);
+      showMessage("Tasks PDF downloaded.");
+    } catch (error) { showMessage(error.message || "The tasks PDF could not be downloaded.", true); }
   });
 
   return { load };
