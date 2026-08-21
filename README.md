@@ -26,6 +26,12 @@ Configure these environment variables in Netlify:
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL` (optional; defaults to `gpt-4.1-mini`)
 - `OPENAI_TRANSCRIBE_MODEL` (optional; defaults to `gpt-4o-mini-transcribe`)
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `TWILIO_ACCOUNT_SID`
+- `TWILIO_AUTH_TOKEN`
+- `TWILIO_MESSAGING_SERVICE_SID` (recommended) or `TWILIO_PHONE_NUMBER`
+
+Worker phone sign-in also requires the Twilio phone provider to be enabled in Supabase Authentication. Run migration `015_worker_phone_login.sql` before enabling the worker login UI in production.
 
 The Supabase publishable key and website-restricted Google Maps key are intentionally returned to the browser. Never expose a Supabase service-role key, and restrict the Google key to the deployed website.
 

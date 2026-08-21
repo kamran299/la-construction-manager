@@ -1,8 +1,8 @@
 import { createProjectsModule } from "./projects.js";
 import { createReportsModule } from "./reports.js?v=20260820-gps-time-clock-1";
-import { createTeamModule } from "./team.js?v=20260820-worker-timeclock-5";
+import { createTeamModule } from "./team.js?v=20260820-phone-login-1";
 import { createTasksModule } from "./tasks.js?v=20260820-gps-time-clock-1";
-import { createAlertsModule, createFilesModule, createInspectionsModule, createLaborModule, createMaterialsModule, createScheduleModule, createSubcontractorsModule } from "./operations.js?v=20260820-worker-timeclock-5";
+import { createAlertsModule, createFilesModule, createInspectionsModule, createLaborModule, createMaterialsModule, createScheduleModule, createSubcontractorsModule } from "./operations.js?v=20260820-phone-login-1";
 
 const ROLE_NAMES = {
   owner_admin: "Owner / Admin",
@@ -146,7 +146,7 @@ export async function showDashboard({ supabase, session }) {
   modules.subcontractors = createSubcontractorsModule(operationsAccess);
   modules.files = createFilesModule(operationsAccess);
   modules.alerts = createAlertsModule(operationsAccess);
-  modules.team = createTeamModule({ supabase, session, companyId: membership.companies.id, canManage: ["owner_admin", "project_manager"].includes(membership.role) });
+  modules.team = createTeamModule({ supabase, session, companyId: membership.companies.id, canManage: ["owner_admin", "project_manager"].includes(membership.role), managerRole: membership.role });
   modules.dashboard = { load: loadOperationsMetrics };
   if (employeeOnly) {
     document.querySelectorAll(".nav-item").forEach((item) => { item.hidden = item.getAttribute("href") !== "#labor"; });

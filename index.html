@@ -8,8 +8,8 @@
     <title>Sign in | L&A Construction Manager</title>
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/login.css">
-    <link rel="stylesheet" href="/css/dashboard.css?v=20260820-worker-timeclock-5">
-    <script type="module" src="/js/app.js?v=20260820-worker-timeclock-5"></script>
+    <link rel="stylesheet" href="/css/dashboard.css?v=20260820-phone-login-1">
+    <script type="module" src="/js/app.js?v=20260820-phone-login-1"></script>
   </head>
   <body>
     <main id="loginView" class="login-layout">
@@ -28,9 +28,14 @@
           <div class="mobile-brand" aria-hidden="true">L&amp;A</div>
           <p class="eyebrow">Welcome back</p>
           <h2 id="login-title">Sign in to your account</h2>
-          <p class="intro">Use the work email connected to your company.</p>
+          <p class="intro">Managers can use email. Workers can receive a one-time code by text.</p>
 
           <div id="configMessage" class="message message-error" role="alert" hidden></div>
+
+          <div class="login-methods" role="tablist" aria-label="Sign-in method">
+            <button id="emailLoginTab" class="login-method is-active" type="button" role="tab" aria-selected="true" aria-controls="loginForm">Manager email</button>
+            <button id="phoneLoginTab" class="login-method" type="button" role="tab" aria-selected="false" aria-controls="phoneLoginForm">Worker phone</button>
+          </div>
 
           <form id="loginForm" novalidate>
             <div class="field">
@@ -53,6 +58,25 @@
               <span class="button-label">Sign in</span>
               <span class="spinner" aria-hidden="true"></span>
             </button>
+          </form>
+
+          <form id="phoneLoginForm" novalidate hidden>
+            <div class="field">
+              <label for="loginPhone">Mobile phone number</label>
+              <input id="loginPhone" name="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="(650) 555-0123" required>
+              <p id="phoneError" class="field-error" aria-live="polite"></p>
+            </div>
+            <div id="otpField" class="field" hidden>
+              <label for="loginCode">6-digit code</label>
+              <input id="loginCode" name="code" type="text" autocomplete="one-time-code" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="000000">
+              <p id="codeError" class="field-error" aria-live="polite"></p>
+            </div>
+            <div id="phoneFormMessage" class="message" role="status" aria-live="polite" hidden></div>
+            <button id="phoneSubmitButton" class="primary-button" type="submit">
+              <span class="button-label">Text me a sign-in code</span>
+              <span class="spinner" aria-hidden="true"></span>
+            </button>
+            <button id="changePhoneButton" class="text-button change-phone-button" type="button" hidden>Use a different phone number</button>
           </form>
 
           <p class="support-copy">Need access? Contact your company administrator.</p>
@@ -348,13 +372,13 @@
             </form>
           </section>
           <section id="workerCard" class="workspace-card">
-            <h2>Add worker</h2><p>Add a worker to manual labor records. An account is required for personal GPS check-in.</p>
+            <h2>Add worker</h2><p>The worker will receive a text invitation. Their phone number becomes their secure sign-in.</p>
             <form id="workerForm">
               <label for="workerName">Full name</label><input id="workerName" required>
               <label for="workerPhone">Phone</label><input id="workerPhone" type="tel" required>
               <label for="workerEmail">Email (optional)</label><input id="workerEmail" type="email">
               <label for="workerTrade">Trade / work</label><input id="workerTrade" placeholder="Carpenter, laborer, painter...">
-              <button id="workerButton" class="primary-button" type="submit">Add worker</button>
+              <button id="workerButton" class="primary-button" type="submit">Add worker &amp; send text</button>
             </form>
           </section></div>
           <section><div id="teamList" class="team-list"></div></section>
