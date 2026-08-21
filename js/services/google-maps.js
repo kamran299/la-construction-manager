@@ -27,23 +27,25 @@ function loadMapsScript(key) {
   return mapsPromise;
 }
 
-export async function enableAddressAutocomplete(input) {
+export async function enableAddressAutocomplete(input, { id = "projectAddressAutocomplete", placeholder = "Start typing an address" } = {}) {
   const { googleMapsKey } = await getPublicConfig();
   if (!googleMapsKey || !input) return false;
 
   const google = await loadMapsScript(googleMapsKey);
   const { PlaceAutocompleteElement } = await google.maps.importLibrary("places");
   const autocomplete = new PlaceAutocompleteElement();
-  autocomplete.id = "projectAddressAutocomplete";
-  autocomplete.placeholder = "Start typing an address";
+  autocomplete.id = id;
+  autocomplete.placeholder = placeholder;
+  autocomplete.value = input.value || "";
   autocomplete.setAttribute("aria-label", "Address");
 
   input.insertAdjacentElement("afterend", autocomplete);
   input.hidden = true;
-  document.querySelector('label[for="projectAddress"]')?.setAttribute("for", autocomplete.id);
+  if (input.id) document.querySelector(`label[for="${input.id}"]`)?.setAttribute("for", autocomplete.id);
 
   autocomplete.addEventListener("input", () => {
     input.value = "";
+    input.dataset.addressPending = "true";
     delete input.dataset.latitude;
     delete input.dataset.longitude;
   });
@@ -55,6 +57,7 @@ export async function enableAddressAutocomplete(input) {
       input.dataset.latitude = String(place.location.lat());
       input.dataset.longitude = String(place.location.lng());
     }
+    delete input.dataset.addressPending;
   });
 
   return autocomplete;

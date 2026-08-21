@@ -71,6 +71,7 @@
 .project-edit-form:not([hidden]) { display: grid; }
 .project-edit-form label { color: var(--slate-700); font-size: .76rem; font-weight: 800; }
 .project-edit-form input { display: block; width: 100%; height: 44px; margin-top: 7px; padding: 0 12px; border: 1px solid var(--slate-300); border-radius: 9px; font: inherit; }
+.project-edit-form gmp-place-autocomplete{display:block;width:100%;min-height:44px;margin-top:7px}.address-help{display:block;margin-top:6px;color:var(--slate-500);font-size:.68rem;font-weight:500;line-height:1.35}
 .project-edit-actions { display: flex; grid-column: 1 / -1; gap: 10px; }
 .project-gps-badge{margin-top:5px!important;color:#b54708!important;font-weight:800}.project-gps-badge.is-ready{color:#087c4c!important}.project-gps-settings{display:grid;grid-column:1/-1;grid-template-columns:minmax(180px,1fr) minmax(170px,.55fr) auto;gap:12px;align-items:end;padding:14px;border:1px solid #d0d5dd;border-radius:11px;background:#fff}.project-gps-settings>div strong,.project-gps-settings>div small{display:block}.project-gps-settings>div small{margin-top:5px;color:#667085;font-weight:400}.project-gps-settings>p{grid-column:1/-1;margin:0;color:#667085;font-size:.72rem}.project-gps-settings button{min-height:44px}
 .project-edit-actions button { width: auto; min-width: 130px; }

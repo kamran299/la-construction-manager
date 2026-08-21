@@ -164,7 +164,7 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
         <form class="project-edit-form" data-project-edit-form hidden>
           <label>Project name<input name="projectName" value="${escapeHtml(project.name)}" required></label>
           <label>Job type<select name="projectType" required>${renderProjectTypeOptions(project.project_type || "new-construction")}</select></label>
-          <label>Address<input name="projectAddress" value="${escapeHtml(project.address || "")}" autocomplete="street-address"></label>
+          <label>Address<input name="projectAddress" value="${escapeHtml(project.address || "")}" autocomplete="street-address"><small class="address-help">Choose a Google suggestion so the address and GPS location save together.</small></label>
           <section class="project-gps-settings">
             <div><strong>Jobsite GPS area</strong><small>While you are physically at this project, press the button to set its center.</small></div>
             <label>Allowed radius (meters)<input name="geofenceRadius" type="number" min="50" max="2000" step="10" value="${project.geofence_radius_m || 250}" required></label>
@@ -232,6 +232,11 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
       button.addEventListener("click", () => deleteProjectFile(files.find(({ id }) => id === button.dataset.deleteFile)));
     });
     const editForm = list.querySelector("[data-project-edit-form]");
+    const editAddressInput = editForm?.elements.projectAddress;
+    if (editAddressInput) enableAddressAutocomplete(editAddressInput, {
+      id: `projectAddressAutocomplete-${project.id}`,
+      placeholder: "Search for the complete project address",
+    }).catch(() => { editAddressInput.hidden = false; });
     list.querySelector("[data-toggle-project-edit]")?.addEventListener("click", () => { editForm.hidden = !editForm.hidden; });
     list.querySelector("[data-cancel-project-edit]")?.addEventListener("click", () => { editForm.hidden = true; });
     editForm?.addEventListener("submit", (event) => updateProject(event, project));
@@ -261,9 +266,12 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
     const projectType = event.currentTarget.elements.projectType.value;
     const radius = Number(event.currentTarget.elements.geofenceRadius.value);
     const addressChanged = address !== (project.address || "").trim();
-    const gpsUpdated = event.currentTarget.dataset.gpsUpdated === "true";
-    const rawLatitude = event.currentTarget.elements.projectLatitude.value;
-    const rawLongitude = event.currentTarget.elements.projectLongitude.value;
+    if (event.currentTarget.elements.projectAddress.dataset.addressPending === "true") return showError("Choose the complete address from the Google suggestions before saving.");
+    const selectedLatitude = event.currentTarget.elements.projectAddress.dataset.latitude;
+    const selectedLongitude = event.currentTarget.elements.projectAddress.dataset.longitude;
+    const gpsUpdated = event.currentTarget.dataset.gpsUpdated === "true" || (selectedLatitude !== undefined && selectedLongitude !== undefined);
+    const rawLatitude = selectedLatitude ?? event.currentTarget.elements.projectLatitude.value;
+    const rawLongitude = selectedLongitude ?? event.currentTarget.elements.projectLongitude.value;
     const latitude = addressChanged && !gpsUpdated ? null : (rawLatitude === "" ? null : Number(rawLatitude));
     const longitude = addressChanged && !gpsUpdated ? null : (rawLongitude === "" ? null : Number(rawLongitude));
     const previousType = project.project_type || "new-construction";
@@ -271,11 +279,16 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
     if (projectType !== previousType && !window.confirm("Changing the job type will replace the current phases and tasks with the new job plan. Existing phase progress will be reset. Continue?")) return;
     submitButton.disabled = true;
     submitButton.textContent = "Saving...";
-    const { error } = await supabase.from("projects").update({ name, address, project_type: projectType, latitude, longitude, geofence_radius_m: radius }).eq("id", project.id);
+    const { data: savedProject, error } = await supabase.from("projects").update({ name, address, project_type: projectType, latitude, longitude, geofence_radius_m: radius }).eq("id", project.id).select("id,address,latitude,longitude,geofence_radius_m").single();
     if (error) {
       submitButton.disabled = false;
       submitButton.textContent = "Save changes";
       return showError(`The project could not be updated: ${error.message}`);
+    }
+    if (!savedProject || savedProject.address !== address) {
+      submitButton.disabled = false;
+      submitButton.textContent = "Save changes";
+      return showError("The address was not confirmed by the server. Please sign in again and retry.");
     }
     if (projectType !== previousType) {
       const { error: deleteError } = await supabase.from("project_phases").delete().eq("project_id", project.id);
@@ -393,6 +406,7 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
     const longitude = addressInput.dataset.longitude ? Number(addressInput.dataset.longitude) : null;
     const projectType = document.querySelector("#projectType").value;
     if (!name || !canManage) return;
+    if (addressInput.dataset.addressPending === "true") return showError("Choose the complete address from the Google suggestions before creating the project.");
     const { data: project, error } = await supabase.from("projects").insert({ company_id: companyId, name, address, project_type: projectType, latitude, longitude }).select().single();
     if (error) return showError("The project could not be created.");
     const template = getProjectTemplate(projectType);
@@ -404,6 +418,7 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
     form.reset();
     delete addressInput.dataset.latitude;
     delete addressInput.dataset.longitude;
+    delete addressInput.dataset.addressPending;
     loadProjects();
   });
 
