@@ -42,11 +42,19 @@ export async function enableAddressAutocomplete(input) {
   input.hidden = true;
   document.querySelector('label[for="projectAddress"]')?.setAttribute("for", autocomplete.id);
 
-  autocomplete.addEventListener("input", () => { input.value = ""; });
+  autocomplete.addEventListener("input", () => {
+    input.value = "";
+    delete input.dataset.latitude;
+    delete input.dataset.longitude;
+  });
   autocomplete.addEventListener("gmp-select", async ({ placePrediction }) => {
     const place = placePrediction.toPlace();
-    await place.fetchFields({ fields: ["formattedAddress"] });
+    await place.fetchFields({ fields: ["formattedAddress", "location"] });
     input.value = place.formattedAddress || "";
+    if (place.location) {
+      input.dataset.latitude = String(place.location.lat());
+      input.dataset.longitude = String(place.location.lng());
+    }
   });
 
   return autocomplete;

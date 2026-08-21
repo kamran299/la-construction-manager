@@ -18,7 +18,7 @@ function datedValue(value) {
 }
 async function loadReferences(supabase, companyId) {
   const [projectResult, memberResult] = await Promise.all([
-    supabase.from("projects").select("id,name,address").eq("company_id", companyId).order("name"),
+    supabase.from("projects").select("id,name,address,latitude,longitude,geofence_radius_m").eq("company_id", companyId).order("name"),
     supabase.from("company_members").select("user_id,full_name,email").eq("company_id", companyId).eq("is_active", true).order("full_name"),
   ]);
   if (projectResult.error || memberResult.error) throw new Error("Projects or team members could not be loaded.");
@@ -187,9 +187,9 @@ export function createLaborModule({ supabase, session, companyId, canManage }) {
   const projectSelect = document.querySelector("#laborProject");
   const memberSelect = document.querySelector("#laborEmployee");
   const dateFilter = document.querySelector("#laborDateFilter");
-  const clockProject = document.querySelector("#timeClockProject");
   const clockAction = document.querySelector("#timeClockAction");
   const clockStatus = document.querySelector("#timeClockStatus");
+  const clockDetectedProject = document.querySelector("#timeClockDetectedProject");
   const clockLocationStatus = document.querySelector("#timeClockLocationStatus");
   const clockList = document.querySelector("#timeClockList");
   let projects = [];
@@ -239,8 +239,13 @@ export function createLaborModule({ supabase, session, companyId, canManage }) {
     clockStatus.classList.toggle("is-clocked-in", Boolean(openClockEntry));
     clockAction.textContent = openClockEntry ? "Check out with GPS" : "Check in with GPS";
     clockAction.classList.toggle("clock-out-button", Boolean(openClockEntry));
-    clockProject.disabled = Boolean(openClockEntry);
-    if (openClockEntry?.project_id) clockProject.value = openClockEntry.project_id;
+    const configuredCount = projects.filter((project) => project.latitude != null && project.longitude != null).length;
+    clockDetectedProject.textContent = openClockEntry
+      ? `Checked in for ${projectName(projects, openClockEntry.project_id)}. Check-out must be inside this same project area.`
+      : configuredCount
+        ? `GPS will automatically choose the nearest valid project area (${configuredCount} configured).`
+        : "No project GPS areas are configured yet. A manager must set them in Projects.";
+    clockAction.disabled = !openClockEntry && configuredCount === 0;
     clockList.innerHTML = entries.length ? entries.map((entry) => `<article class="time-clock-row${entry.check_out_at ? "" : " is-open"}"><div><strong>${escapeHtml(entry.employee_name)}</strong><span>${escapeHtml(projectName(projects, entry.project_id))}</span></div><div class="clock-times"><span><b>In</b> ${escapeHtml(clockTime(entry.check_in_at))}</span><span><b>Out</b> ${escapeHtml(clockTime(entry.check_out_at))}</span><strong>${escapeHtml(clockDuration(entry))} hrs</strong></div><div class="clock-locations">${locationLink(entry.check_in_latitude, entry.check_in_longitude, `Check-in GPS${entry.check_in_accuracy_m ? ` (±${Math.round(entry.check_in_accuracy_m)}m)` : ""}`)}${entry.check_out_at ? locationLink(entry.check_out_latitude, entry.check_out_longitude, `Check-out GPS${entry.check_out_accuracy_m ? ` (±${Math.round(entry.check_out_accuracy_m)}m)` : ""}`) : '<span>Currently working</span>'}</div></article>`).join("") : '<p class="tasks-empty">No GPS check-ins were recorded for this date.</p>';
   }
 
@@ -249,8 +254,6 @@ export function createLaborModule({ supabase, session, companyId, canManage }) {
     try {
       ({ projects, members } = await loadReferences(supabase, companyId));
       projectSelect.innerHTML = projectOptions(projects);
-      const priorClockProject = clockProject.value;
-      clockProject.innerHTML = projectOptions(projects, priorClockProject);
       memberSelect.innerHTML = members.map((member) => `<option value="${member.user_id}"${!canManage && member.user_id === session.user.id ? " selected" : ""}>${escapeHtml(member.full_name || member.email)}</option>`).join("");
       memberSelect.disabled = !canManage;
       const range = clockDayRange(dateFilter.value);
@@ -278,10 +281,11 @@ export function createLaborModule({ supabase, session, companyId, canManage }) {
       clockLocationStatus.textContent = `Location found within about ${Math.round(gps.accuracy)} meters. Saving...`;
       const result = openClockEntry
         ? await supabase.rpc("gps_clock_out", { p_entry_id: openClockEntry.id, p_latitude: gps.latitude, p_longitude: gps.longitude, p_accuracy_m: gps.accuracy })
-        : await supabase.rpc("gps_clock_in", { p_company_id: companyId, p_project_id: clockProject.value || null, p_latitude: gps.latitude, p_longitude: gps.longitude, p_accuracy_m: gps.accuracy });
+        : await supabase.rpc("gps_clock_in", { p_company_id: companyId, p_project_id: null, p_latitude: gps.latitude, p_longitude: gps.longitude, p_accuracy_m: gps.accuracy });
       if (result.error) throw result.error;
       dateFilter.value = today();
-      clockLocationStatus.textContent = openClockEntry ? "Checked out successfully. GPS location and server time were saved." : "Checked in successfully. GPS location and server time were saved.";
+      const matchedProject = projectName(projects, result.data?.project_id);
+      clockLocationStatus.textContent = openClockEntry ? `Checked out successfully from ${matchedProject}.` : `Checked in successfully for ${matchedProject}.`;
       clockLocationStatus.classList.add("is-success");
       await load();
     } catch (error) {

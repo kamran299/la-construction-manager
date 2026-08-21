@@ -19,6 +19,21 @@ function getFileIcon(file) {
   return "DOC";
 }
 
+function getCurrentGpsLocation() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error("GPS location is not supported on this device."));
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => resolve({ latitude: coords.latitude, longitude: coords.longitude, accuracy: coords.accuracy }),
+      (error) => {
+        if (error.code === error.PERMISSION_DENIED) reject(new Error("Location permission was not allowed. Enable location access and try again."));
+        else if (error.code === error.POSITION_UNAVAILABLE) reject(new Error("Your GPS location is unavailable. Move near a window or outside and try again."));
+        else reject(new Error("GPS took too long. Please try again."));
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    );
+  });
+}
+
 const PROJECT_TYPE_OPTIONS = [
   ["new-construction", "New construction"],
   ["whole-home-remodel", "Whole-home remodel"],
@@ -120,7 +135,7 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
     list.innerHTML = sortedProjects.map((project) => {
       const phases = [...(project.project_phases || [])].sort((a, b) => a.sort_order - b.sort_order);
       return `<button class="project-summary-card" type="button" data-project-id="${project.id}">
-        <span class="project-card-header"><span><strong>${escapeHtml(project.name)}</strong><small>${escapeHtml(project.address || "No address")}</small></span><b>${project.progress_percent}%</b></span>
+        <span class="project-card-header"><span><strong>${escapeHtml(project.name)}</strong><small>${escapeHtml(project.address || "No address")}</small><small class="project-gps-badge ${project.latitude != null && project.longitude != null ? "is-ready" : ""}">${project.latitude != null && project.longitude != null ? `GPS area ready · ${project.geofence_radius_m || 250}m` : "GPS area not set"}</small></span><b>${project.progress_percent}%</b></span>
         <span class="project-phase-preview">${phases.map((phase) => `<span><small>${escapeHtml(phase.name)}</small><i style="--progress:${phase.progress_percent}%"></i></span>`).join("")}</span>
         <span class="open-project-label">Open project <span aria-hidden="true">→</span></span>
       </button>`;
@@ -150,6 +165,14 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
           <label>Project name<input name="projectName" value="${escapeHtml(project.name)}" required></label>
           <label>Job type<select name="projectType" required>${renderProjectTypeOptions(project.project_type || "new-construction")}</select></label>
           <label>Address<input name="projectAddress" value="${escapeHtml(project.address || "")}" autocomplete="street-address"></label>
+          <section class="project-gps-settings">
+            <div><strong>Jobsite GPS area</strong><small>While you are physically at this project, press the button to set its center.</small></div>
+            <label>Allowed radius (meters)<input name="geofenceRadius" type="number" min="50" max="2000" step="10" value="${project.geofence_radius_m || 250}" required></label>
+            <input name="projectLatitude" type="hidden" value="${project.latitude ?? ""}">
+            <input name="projectLongitude" type="hidden" value="${project.longitude ?? ""}">
+            <button class="secondary-button" type="button" data-set-project-gps>Use my current GPS</button>
+            <p data-project-gps-status>${project.latitude != null && project.longitude != null ? "GPS area is configured for this project." : "GPS area has not been configured yet."}</p>
+          </section>
           <div class="project-edit-actions"><button class="primary-button" type="submit">Save changes</button><button class="secondary-button" type="button" data-cancel-project-edit>Cancel</button></div>
         </form>
         ${canDelete ? `<div class="project-danger-zone"><div><strong>Delete project</strong><small>This permanently deletes its phases, tasks, reports connection, and uploaded files.</small></div><button type="button" data-delete-project>Delete project</button></div>` : ""}
@@ -212,6 +235,20 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
     list.querySelector("[data-toggle-project-edit]")?.addEventListener("click", () => { editForm.hidden = !editForm.hidden; });
     list.querySelector("[data-cancel-project-edit]")?.addEventListener("click", () => { editForm.hidden = true; });
     editForm?.addEventListener("submit", (event) => updateProject(event, project));
+    list.querySelector("[data-set-project-gps]")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      const status = editForm.querySelector("[data-project-gps-status]");
+      button.disabled = true;
+      status.textContent = "Finding your current GPS location...";
+      try {
+        const gps = await getCurrentGpsLocation();
+        editForm.elements.projectLatitude.value = String(gps.latitude);
+        editForm.elements.projectLongitude.value = String(gps.longitude);
+        editForm.dataset.gpsUpdated = "true";
+        status.textContent = `Location found within about ${Math.round(gps.accuracy)} meters. Press Save changes.`;
+      } catch (error) { status.textContent = error.message; }
+      finally { button.disabled = false; }
+    });
     list.querySelector("[data-delete-project]")?.addEventListener("click", () => deleteProject(project));
   }
 
@@ -222,12 +259,19 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
     const name = event.currentTarget.elements.projectName.value.trim();
     const address = event.currentTarget.elements.projectAddress.value.trim();
     const projectType = event.currentTarget.elements.projectType.value;
+    const radius = Number(event.currentTarget.elements.geofenceRadius.value);
+    const addressChanged = address !== (project.address || "").trim();
+    const gpsUpdated = event.currentTarget.dataset.gpsUpdated === "true";
+    const rawLatitude = event.currentTarget.elements.projectLatitude.value;
+    const rawLongitude = event.currentTarget.elements.projectLongitude.value;
+    const latitude = addressChanged && !gpsUpdated ? null : (rawLatitude === "" ? null : Number(rawLatitude));
+    const longitude = addressChanged && !gpsUpdated ? null : (rawLongitude === "" ? null : Number(rawLongitude));
     const previousType = project.project_type || "new-construction";
     if (!name) return showError("Project name is required.");
     if (projectType !== previousType && !window.confirm("Changing the job type will replace the current phases and tasks with the new job plan. Existing phase progress will be reset. Continue?")) return;
     submitButton.disabled = true;
     submitButton.textContent = "Saving...";
-    const { error } = await supabase.from("projects").update({ name, address, project_type: projectType }).eq("id", project.id);
+    const { error } = await supabase.from("projects").update({ name, address, project_type: projectType, latitude, longitude, geofence_radius_m: radius }).eq("id", project.id);
     if (error) {
       submitButton.disabled = false;
       submitButton.textContent = "Save changes";
@@ -345,9 +389,11 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
     message.hidden = true;
     const name = document.querySelector("#projectName").value.trim();
     const address = addressInput.value.trim();
+    const latitude = addressInput.dataset.latitude ? Number(addressInput.dataset.latitude) : null;
+    const longitude = addressInput.dataset.longitude ? Number(addressInput.dataset.longitude) : null;
     const projectType = document.querySelector("#projectType").value;
     if (!name || !canManage) return;
-    const { data: project, error } = await supabase.from("projects").insert({ company_id: companyId, name, address, project_type: projectType }).select().single();
+    const { data: project, error } = await supabase.from("projects").insert({ company_id: companyId, name, address, project_type: projectType, latitude, longitude }).select().single();
     if (error) return showError("The project could not be created.");
     const template = getProjectTemplate(projectType);
     const phases = template.map(({ phase: phaseName }, index) => ({ project_id: project.id, name: phaseName, sort_order: index + 1, weight: 1 }));
@@ -356,6 +402,8 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
     const { error: taskError } = await supabase.from("project_tasks").insert(buildProjectTasks(createdPhases || [], template));
     if (taskError) return showError("The phases were created, but their detailed tasks could not be added.");
     form.reset();
+    delete addressInput.dataset.latitude;
+    delete addressInput.dataset.longitude;
     loadProjects();
   });
 
