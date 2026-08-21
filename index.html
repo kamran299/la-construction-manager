@@ -8,8 +8,8 @@
     <title>Sign in | L&A Construction Manager</title>
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/login.css">
-    <link rel="stylesheet" href="/css/dashboard.css?v=20260820-address-permission-4">
-    <script type="module" src="/js/app.js?v=20260820-address-permission-4"></script>
+    <link rel="stylesheet" href="/css/dashboard.css?v=20260820-worker-timeclock-5">
+    <script type="module" src="/js/app.js?v=20260820-worker-timeclock-5"></script>
   </head>
   <body>
     <main id="loginView" class="login-layout">
@@ -84,7 +84,7 @@
           <a class="nav-item" href="#schedule"><span aria-hidden="true">□</span> Schedule</a>
           <a class="nav-item" href="#materials"><span aria-hidden="true">◇</span> Materials</a>
           <a class="nav-item" href="#inspections"><span aria-hidden="true">⌕</span> Inspections</a>
-          <a class="nav-item" href="#labor"><span aria-hidden="true">◷</span> Labor</a>
+          <a id="timeClockNav" class="nav-item" href="#labor"><span aria-hidden="true">◷</span> Time Clock</a>
           <span class="nav-section-label">Company</span>
           <a class="nav-item" href="#subcontractors"><span aria-hidden="true">♢</span> Subcontractors</a>
           <a class="nav-item" href="#files"><span aria-hidden="true">▤</span> Files &amp; Photos</a>
@@ -288,7 +288,7 @@
       </section>
 
       <section id="laborView" class="dashboard-content" aria-labelledby="laborTitle" hidden>
-        <header class="dashboard-header"><div><p class="eyebrow">Employee time &amp; labor</p><h1 id="laborTitle">Labor</h1></div><label class="month-filter">Work date<input id="laborDateFilter" type="date"></label></header>
+        <header class="dashboard-header"><div><p class="eyebrow">Employee attendance &amp; hours</p><h1 id="laborTitle">Time Clock</h1></div><label class="month-filter">Work date<input id="laborDateFilter" type="date"></label></header>
         <div id="laborMessage" class="message" role="status" hidden></div>
         <section class="workspace-card time-clock-card">
           <header class="section-heading"><div><p class="eyebrow">GPS time clock</p><h2>Check in &amp; check out</h2></div><strong id="timeClockStatus" class="clock-status">Not checked in</strong></header>
@@ -338,7 +338,7 @@
         <header class="dashboard-header"><div><p class="eyebrow">Company access</p><h1 id="teamTitle">Users</h1></div></header>
         <div id="teamMessage" class="message" role="status" hidden></div>
         <div class="team-layout">
-          <section id="inviteCard" class="workspace-card">
+          <div class="team-form-column"><section id="inviteCard" class="workspace-card">
             <h2>Add user</h2><p>An invitation email will be sent to the new user.</p>
             <form id="inviteForm">
               <label for="inviteName">Full name</label><input id="inviteName" required>
@@ -347,6 +347,16 @@
               <button id="inviteButton" class="primary-button" type="submit">Send invitation</button>
             </form>
           </section>
+          <section id="workerCard" class="workspace-card">
+            <h2>Add worker</h2><p>Add a worker to manual labor records. An account is required for personal GPS check-in.</p>
+            <form id="workerForm">
+              <label for="workerName">Full name</label><input id="workerName" required>
+              <label for="workerPhone">Phone</label><input id="workerPhone" type="tel" required>
+              <label for="workerEmail">Email (optional)</label><input id="workerEmail" type="email">
+              <label for="workerTrade">Trade / work</label><input id="workerTrade" placeholder="Carpenter, laborer, painter...">
+              <button id="workerButton" class="primary-button" type="submit">Add worker</button>
+            </form>
+          </section></div>
           <section><div id="teamList" class="team-list"></div></section>
         </div>
       </section>

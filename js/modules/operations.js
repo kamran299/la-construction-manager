@@ -194,6 +194,7 @@ export function createLaborModule({ supabase, session, companyId, canManage }) {
   const clockList = document.querySelector("#timeClockList");
   let projects = [];
   let members = [];
+  let workers = [];
   let openClockEntry = null;
   dateFilter.value = today();
   document.querySelector("#laborDate").value = today();
@@ -253,8 +254,14 @@ export function createLaborModule({ supabase, session, companyId, canManage }) {
     hideMessage(message);
     try {
       ({ projects, members } = await loadReferences(supabase, companyId));
+      const workerResult = canManage
+        ? await supabase.from("company_workers").select("id,full_name,phone,email,trade").eq("company_id", companyId).eq("is_active", true).order("full_name")
+        : { data: [], error: null };
+      if (workerResult.error) throw new Error("Worker roster could not be loaded.");
+      workers = workerResult.data || [];
       projectSelect.innerHTML = projectOptions(projects);
-      memberSelect.innerHTML = members.map((member) => `<option value="${member.user_id}"${!canManage && member.user_id === session.user.id ? " selected" : ""}>${escapeHtml(member.full_name || member.email)}</option>`).join("");
+      memberSelect.innerHTML = members.map((member) => `<option value="member:${member.user_id}"${!canManage && member.user_id === session.user.id ? " selected" : ""}>${escapeHtml(member.full_name || member.email)}</option>`).join("")
+        + workers.map((worker) => `<option value="worker:${worker.id}">${escapeHtml(worker.full_name)} · Worker roster</option>`).join("");
       memberSelect.disabled = !canManage;
       const range = clockDayRange(dateFilter.value);
       const [laborResult, clockResult, openClockResult] = await Promise.all([
@@ -295,10 +302,13 @@ export function createLaborModule({ supabase, session, companyId, canManage }) {
   });
   form.addEventListener("submit", async (event) => {
     event.preventDefault(); const button = form.querySelector("button"); button.disabled = true;
-    const memberId = canManage ? memberSelect.value : session.user.id;
+    const selectedEmployee = canManage ? memberSelect.value : `member:${session.user.id}`;
+    const [employeeType, employeeId] = selectedEmployee.split(":");
+    const memberId = employeeType === "member" ? employeeId : null;
     const member = members.find((item) => item.user_id === memberId);
+    const worker = workers.find((item) => item.id === employeeId);
     const workDate = document.querySelector("#laborDate").value;
-    const { error } = await supabase.from("labor_entries").insert({ company_id: companyId, project_id: projectSelect.value || null, member_id: memberId, employee_name: member?.full_name || member?.email || session.user.email, work_date: workDate, hours: Number(document.querySelector("#laborHours").value), trade: document.querySelector("#laborTrade").value.trim() || null, notes: document.querySelector("#laborNotes").value.trim() || null });
+    const { error } = await supabase.from("labor_entries").insert({ company_id: companyId, project_id: projectSelect.value || null, member_id: memberId, employee_name: worker?.full_name || member?.full_name || member?.email || session.user.email, work_date: workDate, hours: Number(document.querySelector("#laborHours").value), trade: document.querySelector("#laborTrade").value.trim() || worker?.trade || null, notes: document.querySelector("#laborNotes").value.trim() || null });
     button.disabled = false; if (error) return showMessage(message, `Labor could not be saved: ${error.message}`, true); form.reset(); document.querySelector("#laborDate").value = workDate; dateFilter.value = workDate; showMessage(message, "Labor entry saved."); await load();
   });
   return { load };

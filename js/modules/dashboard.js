@@ -1,8 +1,8 @@
 import { createProjectsModule } from "./projects.js";
 import { createReportsModule } from "./reports.js?v=20260820-gps-time-clock-1";
-import { createTeamModule } from "./team.js";
+import { createTeamModule } from "./team.js?v=20260820-worker-timeclock-5";
 import { createTasksModule } from "./tasks.js?v=20260820-gps-time-clock-1";
-import { createAlertsModule, createFilesModule, createInspectionsModule, createLaborModule, createMaterialsModule, createScheduleModule, createSubcontractorsModule } from "./operations.js?v=20260820-gps-time-clock-1";
+import { createAlertsModule, createFilesModule, createInspectionsModule, createLaborModule, createMaterialsModule, createScheduleModule, createSubcontractorsModule } from "./operations.js?v=20260820-worker-timeclock-5";
 
 const ROLE_NAMES = {
   owner_admin: "Owner / Admin",
@@ -58,6 +58,7 @@ export async function showDashboard({ supabase, session }) {
   const role = ROLE_NAMES[membership?.role] || "Member";
   document.querySelector("#roleLabel").textContent = role;
   document.querySelector("#sidebarUserRole").textContent = role;
+  const employeeOnly = membership?.role === "foreman_employee";
 
   if (!membership?.companies) {
     document.querySelector("#companyLabel").textContent = "Your account is not connected to a company workspace yet.";
@@ -115,6 +116,7 @@ export async function showDashboard({ supabase, session }) {
   };
   const modules = {};
   function navigate(name) {
+    if (employeeOnly) name = "labor";
     Object.entries(views).forEach(([key, view]) => { view.hidden = key !== name; });
     let activeNav;
     document.querySelectorAll(".nav-item").forEach((item) => {
@@ -146,7 +148,12 @@ export async function showDashboard({ supabase, session }) {
   modules.alerts = createAlertsModule(operationsAccess);
   modules.team = createTeamModule({ supabase, session, companyId: membership.companies.id, canManage: ["owner_admin", "project_manager"].includes(membership.role) });
   modules.dashboard = { load: loadOperationsMetrics };
-  Promise.all([modules.tasks.load(), modules.inspections.load()]).then(() => Promise.all([loadOperationsMetrics(), modules.alerts.load()]));
+  if (employeeOnly) {
+    document.querySelectorAll(".nav-item").forEach((item) => { item.hidden = item.getAttribute("href") !== "#labor"; });
+    document.querySelectorAll(".nav-section-label").forEach((label) => { label.hidden = true; });
+  } else {
+    Promise.all([modules.tasks.load(), modules.inspections.load()]).then(() => Promise.all([loadOperationsMetrics(), modules.alerts.load()]));
+  }
   document.querySelectorAll(".nav-item").forEach((item) => item.addEventListener("click", (event) => { event.preventDefault(); navigate(item.getAttribute("href").slice(1)); }));
-  navigate(location.hash.slice(1) in views ? location.hash.slice(1) : "dashboard");
+  navigate(employeeOnly ? "labor" : (location.hash.slice(1) in views ? location.hash.slice(1) : "dashboard"));
 }
