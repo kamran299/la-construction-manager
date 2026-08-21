@@ -8,8 +8,8 @@
     <title>Sign in | L&A Construction Manager</title>
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/login.css">
-    <link rel="stylesheet" href="/css/dashboard.css?v=20260820-operations-photos-1">
-    <script type="module" src="/js/app.js?v=20260820-operations-photos-1"></script>
+    <link rel="stylesheet" href="/css/dashboard.css?v=20260820-gps-time-clock-1">
+    <script type="module" src="/js/app.js?v=20260820-gps-time-clock-1"></script>
   </head>
   <body>
     <main id="loginView" class="login-layout">
@@ -290,6 +290,16 @@
       <section id="laborView" class="dashboard-content" aria-labelledby="laborTitle" hidden>
         <header class="dashboard-header"><div><p class="eyebrow">Employee time &amp; labor</p><h1 id="laborTitle">Labor</h1></div><label class="month-filter">Work date<input id="laborDateFilter" type="date"></label></header>
         <div id="laborMessage" class="message" role="status" hidden></div>
+        <section class="workspace-card time-clock-card">
+          <header class="section-heading"><div><p class="eyebrow">GPS time clock</p><h2>Check in &amp; check out</h2></div><strong id="timeClockStatus" class="clock-status">Not checked in</strong></header>
+          <p class="time-clock-privacy">Your location is recorded only when you press a button. The app does not track you between check-in and check-out.</p>
+          <div class="time-clock-controls">
+            <label>Project<select id="timeClockProject"></select></label>
+            <button id="timeClockAction" class="primary-button" type="button">Check in with GPS</button>
+          </div>
+          <p id="timeClockLocationStatus" class="clock-location-status" role="status">Your browser will ask for location permission when you check in.</p>
+          <div id="timeClockList" class="time-clock-list"></div>
+        </section>
         <div class="operations-layout">
           <section class="workspace-card operations-form-card"><h2>Add labor</h2><form id="laborForm">
             <label>Employee<select id="laborEmployee"></select></label><label>Project<select id="laborProject"></select></label><label>Date<input id="laborDate" type="date" required></label><label>Hours<input id="laborHours" type="number" min="0.25" max="24" step="0.25" required></label>

@@ -187,26 +187,108 @@ export function createLaborModule({ supabase, session, companyId, canManage }) {
   const projectSelect = document.querySelector("#laborProject");
   const memberSelect = document.querySelector("#laborEmployee");
   const dateFilter = document.querySelector("#laborDateFilter");
+  const clockProject = document.querySelector("#timeClockProject");
+  const clockAction = document.querySelector("#timeClockAction");
+  const clockStatus = document.querySelector("#timeClockStatus");
+  const clockLocationStatus = document.querySelector("#timeClockLocationStatus");
+  const clockList = document.querySelector("#timeClockList");
   let projects = [];
   let members = [];
+  let openClockEntry = null;
   dateFilter.value = today();
   document.querySelector("#laborDate").value = today();
+
+  function clockDayRange(value) {
+    const start = new Date(`${value}T00:00:00`);
+    const end = new Date(start); end.setDate(end.getDate() + 1);
+    return { start: start.toISOString(), end: end.toISOString() };
+  }
+
+  function clockTime(value) {
+    return value ? new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—";
+  }
+
+  function clockDuration(entry) {
+    const start = new Date(entry.check_in_at).getTime();
+    const end = entry.check_out_at ? new Date(entry.check_out_at).getTime() : Date.now();
+    return Math.max(0, (end - start) / 3600000).toFixed(2);
+  }
+
+  function locationLink(latitude, longitude, label) {
+    if (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) return "";
+    return `<a class="clock-map-link" href="https://www.google.com/maps?q=${Number(latitude)},${Number(longitude)}" target="_blank" rel="noopener">${escapeHtml(label)}</a>`;
+  }
+
+  function currentGpsLocation() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) { reject(new Error("GPS location is not supported on this device.")); return; }
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => resolve({ latitude: coords.latitude, longitude: coords.longitude, accuracy: coords.accuracy }),
+        (error) => {
+          if (error.code === error.PERMISSION_DENIED) reject(new Error("Location permission was not allowed. Please enable location access and try again."));
+          else if (error.code === error.POSITION_UNAVAILABLE) reject(new Error("Your GPS location is unavailable. Move near a window or outside and try again."));
+          else reject(new Error("GPS took too long. Please try again."));
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+      );
+    });
+  }
+
+  function renderClock(entries) {
+    clockStatus.textContent = openClockEntry ? `Checked in at ${clockTime(openClockEntry.check_in_at)}` : "Not checked in";
+    clockStatus.classList.toggle("is-clocked-in", Boolean(openClockEntry));
+    clockAction.textContent = openClockEntry ? "Check out with GPS" : "Check in with GPS";
+    clockAction.classList.toggle("clock-out-button", Boolean(openClockEntry));
+    clockProject.disabled = Boolean(openClockEntry);
+    if (openClockEntry?.project_id) clockProject.value = openClockEntry.project_id;
+    clockList.innerHTML = entries.length ? entries.map((entry) => `<article class="time-clock-row${entry.check_out_at ? "" : " is-open"}"><div><strong>${escapeHtml(entry.employee_name)}</strong><span>${escapeHtml(projectName(projects, entry.project_id))}</span></div><div class="clock-times"><span><b>In</b> ${escapeHtml(clockTime(entry.check_in_at))}</span><span><b>Out</b> ${escapeHtml(clockTime(entry.check_out_at))}</span><strong>${escapeHtml(clockDuration(entry))} hrs</strong></div><div class="clock-locations">${locationLink(entry.check_in_latitude, entry.check_in_longitude, `Check-in GPS${entry.check_in_accuracy_m ? ` (±${Math.round(entry.check_in_accuracy_m)}m)` : ""}`)}${entry.check_out_at ? locationLink(entry.check_out_latitude, entry.check_out_longitude, `Check-out GPS${entry.check_out_accuracy_m ? ` (±${Math.round(entry.check_out_accuracy_m)}m)` : ""}`) : '<span>Currently working</span>'}</div></article>`).join("") : '<p class="tasks-empty">No GPS check-ins were recorded for this date.</p>';
+  }
 
   async function load() {
     hideMessage(message);
     try {
       ({ projects, members } = await loadReferences(supabase, companyId));
       projectSelect.innerHTML = projectOptions(projects);
+      const priorClockProject = clockProject.value;
+      clockProject.innerHTML = projectOptions(projects, priorClockProject);
       memberSelect.innerHTML = members.map((member) => `<option value="${member.user_id}"${!canManage && member.user_id === session.user.id ? " selected" : ""}>${escapeHtml(member.full_name || member.email)}</option>`).join("");
       memberSelect.disabled = !canManage;
-      const { data, error } = await supabase.from("labor_entries").select("*").eq("company_id", companyId).eq("work_date", dateFilter.value).order("employee_name");
-      if (error) throw new Error("Labor entries could not be loaded.");
-      const total = (data || []).reduce((sum, item) => sum + Number(item.hours || 0), 0);
+      const range = clockDayRange(dateFilter.value);
+      const [laborResult, clockResult, openClockResult] = await Promise.all([
+        supabase.from("labor_entries").select("*").eq("company_id", companyId).eq("work_date", dateFilter.value).order("employee_name"),
+        supabase.from("time_clock_entries").select("*").eq("company_id", companyId).gte("check_in_at", range.start).lt("check_in_at", range.end).order("check_in_at", { ascending: false }),
+        supabase.from("time_clock_entries").select("*").eq("company_id", companyId).eq("member_id", session.user.id).is("check_out_at", null).maybeSingle(),
+      ]);
+      if (laborResult.error) throw new Error("Labor entries could not be loaded.");
+      if (clockResult.error || openClockResult.error) throw new Error("GPS time clock could not be loaded.");
+      openClockEntry = openClockResult.data || null;
+      const total = (laborResult.data || []).reduce((sum, item) => sum + Number(item.hours || 0), 0);
       document.querySelector("#laborTotal").textContent = `${total.toFixed(1)} hours`;
-      list.innerHTML = (data || []).length ? data.map((item) => `<article class="operation-row"><time>${escapeHtml(String(item.hours))}<small>hours</small></time><div><strong>${escapeHtml(item.employee_name)}</strong><span>${escapeHtml(projectName(projects, item.project_id))}${item.trade ? ` · ${escapeHtml(item.trade)}` : ""}</span>${item.notes ? `<p>${escapeHtml(item.notes)}</p>` : ""}</div></article>`).join("") : '<p class="tasks-empty">No labor has been entered for this date.</p>';
+      list.innerHTML = (laborResult.data || []).length ? laborResult.data.map((item) => `<article class="operation-row"><time>${escapeHtml(String(item.hours))}<small>hours</small></time><div><strong>${escapeHtml(item.employee_name)}</strong><span>${escapeHtml(projectName(projects, item.project_id))}${item.trade ? ` · ${escapeHtml(item.trade)}` : ""}</span>${item.notes ? `<p>${escapeHtml(item.notes)}</p>` : ""}</div></article>`).join("") : '<p class="tasks-empty">No labor has been entered for this date.</p>';
+      renderClock(clockResult.data || []);
     } catch (error) { showMessage(message, error.message, true); }
   }
   dateFilter.addEventListener("change", load);
+  clockAction.addEventListener("click", async () => {
+    clockAction.disabled = true;
+    clockLocationStatus.textContent = "Getting your current GPS location...";
+    clockLocationStatus.classList.remove("is-error", "is-success");
+    try {
+      const gps = await currentGpsLocation();
+      clockLocationStatus.textContent = `Location found within about ${Math.round(gps.accuracy)} meters. Saving...`;
+      const result = openClockEntry
+        ? await supabase.rpc("gps_clock_out", { p_entry_id: openClockEntry.id, p_latitude: gps.latitude, p_longitude: gps.longitude, p_accuracy_m: gps.accuracy })
+        : await supabase.rpc("gps_clock_in", { p_company_id: companyId, p_project_id: clockProject.value || null, p_latitude: gps.latitude, p_longitude: gps.longitude, p_accuracy_m: gps.accuracy });
+      if (result.error) throw result.error;
+      dateFilter.value = today();
+      clockLocationStatus.textContent = openClockEntry ? "Checked out successfully. GPS location and server time were saved." : "Checked in successfully. GPS location and server time were saved.";
+      clockLocationStatus.classList.add("is-success");
+      await load();
+    } catch (error) {
+      clockLocationStatus.textContent = error.message || "The GPS time clock could not be saved.";
+      clockLocationStatus.classList.add("is-error");
+    } finally { clockAction.disabled = false; }
+  });
   form.addEventListener("submit", async (event) => {
     event.preventDefault(); const button = form.querySelector("button"); button.disabled = true;
     const memberId = canManage ? memberSelect.value : session.user.id;

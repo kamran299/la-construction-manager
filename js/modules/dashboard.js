@@ -1,8 +1,8 @@
 import { createProjectsModule } from "./projects.js";
-import { createReportsModule } from "./reports.js?v=20260820-operations-photos-1";
+import { createReportsModule } from "./reports.js?v=20260820-gps-time-clock-1";
 import { createTeamModule } from "./team.js";
-import { createTasksModule } from "./tasks.js?v=20260820-operations-photos-1";
-import { createAlertsModule, createFilesModule, createInspectionsModule, createLaborModule, createMaterialsModule, createScheduleModule, createSubcontractorsModule } from "./operations.js?v=20260820-operations-photos-1";
+import { createTasksModule } from "./tasks.js?v=20260820-gps-time-clock-1";
+import { createAlertsModule, createFilesModule, createInspectionsModule, createLaborModule, createMaterialsModule, createScheduleModule, createSubcontractorsModule } from "./operations.js?v=20260820-gps-time-clock-1";
 
 const ROLE_NAMES = {
   owner_admin: "Owner / Admin",
