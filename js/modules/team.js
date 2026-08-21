@@ -81,10 +81,30 @@ export function createTeamModule({ supabase, session, companyId, canManage, mana
     const removeMember = event.target.closest("[data-remove-member]");
     const removeWorker = event.target.closest("[data-remove-worker]");
     if (removeMember || removeWorker) {
-      if (!window.confirm("Remove this person's access? Their reports and work history will be kept.")) return;
+      const removeButton = removeMember || removeWorker;
+      if (removeButton.dataset.confirmRemove !== "true") {
+        removeButton.dataset.confirmRemove = "true";
+        removeButton.textContent = "Click again to confirm";
+        message.textContent = "Click the red button again to remove access. Reports and work history will be kept.";
+        message.classList.remove("message-error");
+        message.hidden = false;
+        window.setTimeout(() => {
+          if (!removeButton.isConnected) return;
+          delete removeButton.dataset.confirmRemove;
+          removeButton.textContent = removeMember ? "Remove access" : "Remove worker";
+        }, 8000);
+        return;
+      }
+      removeButton.disabled = true;
+      removeButton.textContent = "Removing...";
       const targetType = removeMember ? "member" : "worker";
       const targetId = removeMember?.dataset.removeMember || removeWorker.dataset.removeWorker;
-      await managePerson({ targetType, targetId, action: "remove" });
+      const removed = await managePerson({ targetType, targetId, action: "remove" });
+      if (!removed && removeButton.isConnected) {
+        removeButton.disabled = false;
+        delete removeButton.dataset.confirmRemove;
+        removeButton.textContent = removeMember ? "Remove access" : "Remove worker";
+      }
       return;
     }
     const button = event.target.closest("[data-worker-id]");
