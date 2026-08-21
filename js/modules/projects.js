@@ -315,26 +315,38 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
 
   async function deleteProject(project) {
     if (!canDelete) return showError("Only an Owner / Admin can delete a project.");
-    const confirmation = window.prompt(`This will permanently delete "${project.name}" and all of its information.\n\nType DELETE to confirm:`);
-    if (confirmation !== "DELETE") return;
-    message.hidden = true;
     const deleteButton = list.querySelector("[data-delete-project]");
+    if (!deleteButton) return;
+    if (deleteButton.dataset.confirmDelete !== "true") {
+      deleteButton.dataset.confirmDelete = "true";
+      deleteButton.textContent = "Click again to permanently delete";
+      message.textContent = `This permanently deletes "${project.name}". Click the red button again within 8 seconds to confirm.`;
+      message.hidden = false;
+      window.setTimeout(() => {
+        if (!deleteButton.isConnected || deleteButton.dataset.confirmDelete !== "true") return;
+        delete deleteButton.dataset.confirmDelete;
+        deleteButton.textContent = "Delete project";
+        message.hidden = true;
+      }, 8000);
+      return;
+    }
+    deleteButton.dataset.confirmDelete = "deleting";
+    message.hidden = true;
     if (deleteButton) { deleteButton.disabled = true; deleteButton.textContent = "Deleting..."; }
     const storagePaths = (project.project_files || []).map(({ storage_path: storagePath }) => storagePath).filter(Boolean);
-    if (storagePaths.length) {
-      const { error: storageError } = await supabase.storage.from("project-files").remove(storagePaths);
-      if (storageError) {
-        if (deleteButton) { deleteButton.disabled = false; deleteButton.textContent = "Delete project"; }
-        return showError(`Project files could not be deleted: ${storageError.message}`);
-      }
-    }
-    const { error } = await supabase.from("projects").delete().eq("id", project.id);
-    if (error) {
+    const { data: deletedProjects, error } = await supabase.from("projects").delete().eq("id", project.id).select("id");
+    if (error || !deletedProjects?.length) {
       if (deleteButton) { deleteButton.disabled = false; deleteButton.textContent = "Delete project"; }
-      return showError(`The project could not be deleted: ${error.message}`);
+      delete deleteButton.dataset.confirmDelete;
+      return showError(error
+        ? `The project could not be deleted: ${error.message}`
+        : "The project was not deleted. Only an Owner / Admin can permanently delete projects.");
     }
+    let storageError = null;
+    if (storagePaths.length) ({ error: storageError } = await supabase.storage.from("project-files").remove(storagePaths));
     selectedProjectId = null;
     await loadProjects();
+    if (storageError) showError("The project was deleted, but some uploaded files could not be removed from storage.");
   }
 
   async function updateWholePhase(project, phaseId, progressPercent) {
