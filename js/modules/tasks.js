@@ -59,17 +59,19 @@ function assigneeOptions(selected, members) {
   return '<option value="">Unassigned</option>' + members.map((member) => {
     const name = member.full_name || member.email || "Unnamed user";
     const label = member.full_name && member.email ? `${member.full_name} (${member.email})` : name;
-    return `<option value="${escapeHtml(name)}"${selected === name ? " selected" : ""}>${escapeHtml(label)}</option>`;
+    const value = member.user_id || name;
+    return `<option value="${escapeHtml(value)}"${selected === value ? " selected" : ""}>${escapeHtml(label)}</option>`;
   }).join("");
 }
 
 function renderTask(task, canManage, members) {
   const status = ["open", "in_progress", "completed"].includes(task.status) ? task.status : "open";
   const reporters = task.source === "manual" ? "Added manually" : `Reported by ${(task.reported_by || []).map(displayName).join(", ") || "Not specified"}`;
+  const assignedName = task.assigned_name || members.find((member) => member.user_id === task.assigned_to)?.full_name || "";
   return `<article class="ai-task-card" data-task-id="${escapeHtml(task.id)}">
     <div class="ai-task-card-header"><strong>${escapeHtml(task.project)}</strong>${canManage ? `<select class="task-status-select" aria-label="Task status">${statusOptions(status)}</select>` : `<span class="task-status task-status-${status}">${status === "in_progress" ? "In progress" : status.charAt(0).toUpperCase() + status.slice(1)}</span>`}</div>
     <p>${escapeHtml(task.details)}</p>
-    ${canManage ? `<label class="task-assignee-control">Assigned to<select class="task-assignee-select">${assigneeOptions(task.assigned_to || "", members)}</select></label>` : (task.assigned_to ? `<div class="task-assignee">Assigned to ${escapeHtml(task.assigned_to)}</div>` : '<div class="task-assignee">Unassigned</div>')}
+    ${canManage ? `<label class="task-assignee-control">Assigned to<select class="task-assignee-select">${assigneeOptions(task.assigned_to || "", members)}</select></label>` : (assignedName ? `<div class="task-assignee">Assigned to ${escapeHtml(assignedName)}</div>` : '<div class="task-assignee">Unassigned</div>')}
     <div class="ai-task-meta"><span>${escapeHtml(reporters)}</span><span>${task.due_date ? `Due ${escapeHtml(task.due_date)}` : `From ${escapeHtml(task.source_date || task.latest_date)}`}</span></div>
     ${task.completion_evidence ? `<small>Completion: ${escapeHtml(task.completion_evidence)}</small>` : ""}
   </article>`;
@@ -185,11 +187,9 @@ export function createTasksModule({ supabase, companyId, canManage }) {
   const materialList = document.querySelector("#materialTasksList");
   const completedList = document.querySelector("#completedTasksList");
   const pdfButton = document.querySelector("#tasksPdfButton");
-  let rows = [];
   let tasks = [];
-  let manualTasks = [];
-  let taskOverrides = {};
   let members = [];
+  let projects = [];
   formCard.hidden = !canManage;
 
   function showMessage(text, isError = false) {
@@ -198,34 +198,50 @@ export function createTasksModule({ supabase, companyId, canManage }) {
     message.hidden = false;
   }
 
-  function readControls() {
-    const manualMap = new Map();
-    taskOverrides = {};
-    rows.forEach((row) => {
-      const summary = parseSummary(row.english_summary);
-      (Array.isArray(summary?.manual_tasks) ? summary.manual_tasks : []).forEach((task) => manualMap.set(task.id, task));
-      Object.assign(taskOverrides, summary?.task_overrides || {});
+  function projectName(projectId) { return projects.find((project) => project.id === projectId)?.name || "General"; }
+  function memberName(userId) { const member = members.find((item) => item.user_id === userId); return member?.full_name || member?.email || ""; }
+
+  async function importLegacyTasks(rows) {
+    if (!canManage) return false;
+    const legacyTasks = buildTaskHistory(rows);
+    if (!legacyTasks.length) return false;
+    const imported = legacyTasks.map((task) => {
+      const project = projects.find((item) => item.name.trim().toLowerCase() === String(task.project || "").trim().toLowerCase());
+      const assignedMember = members.find((item) => [item.full_name, item.email].filter(Boolean).some((value) => value === task.assigned_to));
+      return {
+        company_id: companyId,
+        project_id: project?.id || null,
+        legacy_key: String(task.id),
+        details: task.details,
+        task_type: task.is_material ? "material" : "work",
+        status: ["open", "in_progress", "completed"].includes(task.status) ? task.status : "open",
+        assigned_to: assignedMember?.user_id || null,
+        assigned_name: task.assigned_to || assignedMember?.full_name || null,
+        due_date: task.due_date || null,
+        source_date: task.source_date || task.latest_date || today(),
+        source: task.source === "manual" ? "legacy_manual" : "daily_report",
+        completion_evidence: task.completion_evidence || null,
+        completed_at: task.status === "completed" ? new Date().toISOString() : null,
+      };
     });
-    manualTasks = [...manualMap.values()];
+    const { error } = await supabase.from("work_tasks").upsert(imported, { onConflict: "company_id,legacy_key", ignoreDuplicates: true });
+    if (error) throw error;
+    return true;
   }
 
-  async function persistControls() {
-    const latest = rows.at(-1);
-    const summary = parseSummary(latest?.english_summary) || emptySummary();
-    summary.manual_tasks = manualTasks;
-    summary.task_overrides = taskOverrides;
-    if (latest?.id) {
-      const { error } = await supabase.from("daily_report_summaries").update({ english_summary: JSON.stringify(summary), updated_at: new Date().toISOString() }).eq("id", latest.id);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase.from("daily_report_summaries").upsert({ company_id: companyId, report_date: today(), english_summary: JSON.stringify(summary), updated_at: new Date().toISOString() }, { onConflict: "company_id,report_date" });
-      if (error) throw error;
-    }
+  function normalizeTask(task) {
+    return {
+      ...task,
+      project: projectName(task.project_id),
+      is_material: task.task_type === "material",
+      reported_by: [],
+      assigned_name: task.assigned_name || memberName(task.assigned_to),
+    };
   }
 
   function render() {
-    const open = tasks.filter((task) => task.status !== "completed" && !task.is_material);
-    const materials = tasks.filter((task) => task.status !== "completed" && task.is_material);
+    const open = tasks.filter((task) => !["completed", "cancelled"].includes(task.status) && !task.is_material);
+    const materials = tasks.filter((task) => !["completed", "cancelled"].includes(task.status) && task.is_material);
     const completed = tasks.filter((task) => task.status === "completed");
     const sortTasks = (items) => items.sort((a, b) => String(a.project).localeCompare(String(b.project)) || String(a.source_date).localeCompare(String(b.source_date)));
     document.querySelector("#openTaskCount").textContent = String(open.length);
@@ -238,17 +254,23 @@ export function createTasksModule({ supabase, companyId, canManage }) {
 
   async function load() {
     message.hidden = true;
-    const [summaryResult, projectResult, memberResult] = await Promise.all([
+    const [taskResult, summaryResult, projectResult, memberResult] = await Promise.all([
+      supabase.from("work_tasks").select("*").eq("company_id", companyId).order("source_date", { ascending: true }),
       supabase.from("daily_report_summaries").select("id,report_date,english_summary").eq("company_id", companyId).order("report_date", { ascending: true }),
-      supabase.from("projects").select("name").eq("company_id", companyId).order("name"),
-      supabase.from("company_members").select("full_name,email").eq("company_id", companyId).eq("is_active", true).order("full_name"),
+      supabase.from("projects").select("id,name").eq("company_id", companyId).order("name"),
+      supabase.from("company_members").select("user_id,full_name,email").eq("company_id", companyId).eq("is_active", true).order("full_name"),
     ]);
+    if (taskResult.error) { showMessage("The independent Task Manager database needs to be activated.", true); return; }
     if (summaryResult.error || projectResult.error || memberResult.error) { showMessage("Tasks could not be loaded.", true); return; }
-    rows = summaryResult.data || [];
+    projects = projectResult.data || [];
     members = memberResult.data || [];
-    readControls();
-    tasks = buildTaskHistory(rows);
-    projectSelect.innerHTML = '<option value="General">General / no project</option>' + (projectResult.data || []).map((project) => `<option value="${escapeHtml(project.name)}">${escapeHtml(project.name)}</option>`).join("");
+    try {
+      await importLegacyTasks(summaryResult.data || []);
+      const refreshed = await supabase.from("work_tasks").select("*").eq("company_id", companyId).order("source_date", { ascending: true });
+      if (refreshed.error) throw refreshed.error;
+      tasks = (refreshed.data || []).map(normalizeTask);
+    } catch (error) { showMessage(`Existing tasks could not be copied safely: ${error.message}`, true); return; }
+    projectSelect.innerHTML = '<option value="">General / no project</option>' + projects.map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.name)}</option>`).join("");
     assigneeSelect.innerHTML = assigneeOptions("", members);
     render();
   }
@@ -259,8 +281,21 @@ export function createTasksModule({ supabase, companyId, canManage }) {
     const button = document.querySelector("#addManualTaskButton");
     button.disabled = true;
     try {
-      manualTasks.push({ id: newId(), source: "manual", project: projectSelect.value || "General", details: document.querySelector("#manualTaskDetails").value.trim(), assigned_to: assigneeSelect.value, due_date: document.querySelector("#manualTaskDueDate").value || "", status: document.querySelector("#manualTaskStatus").value, is_material: document.querySelector("#manualTaskType").value === "material", source_date: today() });
-      await persistControls();
+      const status = document.querySelector("#manualTaskStatus").value;
+      const { error } = await supabase.from("work_tasks").insert({
+        company_id: companyId,
+        project_id: projectSelect.value || null,
+        details: document.querySelector("#manualTaskDetails").value.trim(),
+        task_type: document.querySelector("#manualTaskType").value === "material" ? "material" : "work",
+        assigned_to: assigneeSelect.value || null,
+        assigned_name: memberName(assigneeSelect.value) || null,
+        due_date: document.querySelector("#manualTaskDueDate").value || null,
+        status,
+        source_date: today(),
+        source: "manual",
+        completed_at: status === "completed" ? new Date().toISOString() : null,
+      });
+      if (error) throw error;
       form.reset();
       showMessage("Task added successfully.");
       await load();
@@ -275,9 +310,13 @@ export function createTasksModule({ supabase, companyId, canManage }) {
     if (!id) return;
     select.disabled = true;
     try {
-      const field = select.classList.contains("task-status-select") ? "status" : "assigned_to";
-      taskOverrides[id] = { ...(taskOverrides[id] || {}), [field]: select.value, updated_at: new Date().toISOString() };
-      await persistControls();
+      const isStatus = select.classList.contains("task-status-select");
+      const field = isStatus ? "status" : "assigned_to";
+      const update = isStatus
+        ? { status: select.value, completed_at: select.value === "completed" ? new Date().toISOString() : null }
+        : { assigned_to: select.value || null, assigned_name: memberName(select.value) || null };
+      const { error } = await supabase.from("work_tasks").update(update).eq("id", id).eq("company_id", companyId);
+      if (error) throw error;
       showMessage(field === "status" ? "Task status updated." : "Task assignment updated.");
       await load();
     } catch { showMessage("The task status could not be saved.", true); select.disabled = false; }
@@ -285,7 +324,7 @@ export function createTasksModule({ supabase, companyId, canManage }) {
 
   pdfButton.addEventListener("click", () => {
     try {
-      downloadTasksPdf(tasks);
+      downloadTasksPdf(tasks.filter((task) => task.status !== "cancelled"));
       showMessage("Tasks PDF downloaded.");
     } catch (error) { showMessage(error.message || "The tasks PDF could not be downloaded.", true); }
   });

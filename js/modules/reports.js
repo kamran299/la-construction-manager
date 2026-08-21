@@ -193,6 +193,20 @@ export function sanitizeAnalysisForDisplay(analysis) {
   };
 }
 
+export function applyDatabaseTaskStatuses(summaryValue, taskRows) {
+  const analysis = parseDailySummary(summaryValue);
+  if (!analysis) return summaryValue;
+  const taskOverrides = { ...(analysis.task_overrides || {}) };
+  (Array.isArray(taskRows) ? taskRows : []).forEach((task) => {
+    const status = task?.status;
+    if (!status) return;
+    const override = { status, updated_at: task.updated_at || null };
+    if (task.legacy_key) taskOverrides[task.legacy_key] = override;
+    if (task.id) taskOverrides[`task:${task.id}`] = override;
+  });
+  return JSON.stringify({ ...analysis, task_overrides: taskOverrides });
+}
+
 function renderReportItems(title, items) {
   const rows = Array.isArray(items) ? items.filter(Boolean) : [];
   if (!rows.length) return "";
@@ -242,18 +256,28 @@ function formatReportDate(value) {
   return new Date(`${value}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 }
 
+function reportPhotos(report) {
+  return Array.isArray(report?.report_photos) ? report.report_photos.filter((photo) => photo?.signed_url) : [];
+}
+
+function renderReportPhotos(report, className = "report-photo-gallery") {
+  const photos = reportPhotos(report);
+  if (!photos.length) return "";
+  return `<section class="${className}" aria-label="Report photos">${photos.map((photo, index) => `<figure><a href="${escapeHtml(photo.signed_url)}" target="_blank" rel="noopener"><img src="${escapeHtml(photo.signed_url)}" alt="Jobsite photo ${index + 1} from ${escapeHtml(report.reporter_name || "daily report")}"></a>${photo.caption ? `<figcaption>${escapeHtml(photo.caption)}</figcaption>` : ""}</figure>`).join("")}</section>`;
+}
+
 function printableReport(report, project, metaLabel, metaValue) {
   const structured = parseStructuredReport(report.english_summary);
   const quickNote = structured?.english_summary || (!structured ? report.english_summary : "");
-  return `<article class="pdf-report"><header><div><h3>${escapeHtml(report.reporter_name || "Unknown")}</h3><small>${escapeHtml(report.reporter_email || "")}</small></div><span>${escapeHtml(metaValue || "General")}</span></header><p>${escapeHtml(report.english_text || "No report details were provided.")}</p>${quickNote ? `<aside><strong>Quick note</strong>${escapeHtml(quickNote)}</aside>` : ""}<footer>${escapeHtml(metaLabel)}: ${escapeHtml(metaValue || project?.name || "General")}</footer></article>`;
+  return `<article class="pdf-report"><header><div><h3>${escapeHtml(report.reporter_name || "Unknown")}</h3><small>${escapeHtml(report.reporter_email || "")}</small></div><span>${escapeHtml(metaValue || "General")}</span></header><p>${escapeHtml(report.english_text || "No report details were provided.")}</p>${quickNote ? `<aside><strong>Quick note</strong>${escapeHtml(quickNote)}</aside>` : ""}${renderReportPhotos(report, "pdf-report-photos")}<footer>${escapeHtml(metaLabel)}: ${escapeHtml(metaValue || project?.name || "General")}</footer></article>`;
 }
 
 function openPdfPrintView({ title, subtitle, body }) {
   const printWindow = window.open("", "_blank");
   if (!printWindow) throw new Error("Please allow pop-ups so the PDF can open.");
   printWindow.document.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>
-    @page{size:letter;margin:.48in}*{box-sizing:border-box}body{margin:0;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-size:9.7pt;line-height:1.4}button{position:fixed;right:18px;top:18px;border:0;border-radius:9px;background:#e96614;color:#fff;padding:11px 16px;font-weight:800;cursor:pointer}.pdf-heading{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #e96614;padding-bottom:13px;margin-bottom:17px}.brand{display:flex;align-items:center;gap:10px}.brand-mark{display:grid;place-items:center;width:44px;height:44px;border:2px solid #e96614;border-radius:12px;font-weight:900}.brand strong{display:block;font-size:15pt}.brand small,.pdf-heading>div:last-child{color:#667085}.pdf-heading>div:last-child{text-align:right}.pdf-heading h1{font-size:19pt;margin:3px 0}.pdf-group{break-inside:avoid-page;margin:0 0 20px}.pdf-group>header{display:flex;justify-content:space-between;gap:16px;align-items:end;background:#152238;color:#fff;border-radius:12px;padding:11px 14px;margin-bottom:8px}.pdf-group h2{font-size:14pt;margin:0}.pdf-group header small{color:#d8deea}.pdf-report{break-inside:avoid;border:1px solid #dfe3ea;border-radius:12px;padding:12px 14px;margin:0 0 8px}.pdf-report header{display:flex;justify-content:space-between;gap:15px;border-bottom:1px solid #e6e9ef;padding-bottom:7px}.pdf-report h3{margin:0;font-size:11pt}.pdf-report header small{color:#667085}.pdf-report header span{background:#fff2e9;color:#c95108;border-radius:999px;padding:4px 9px;font-size:8pt;font-weight:800}.pdf-report p{white-space:pre-wrap;margin:9px 0}.pdf-report aside{background:#f5f7fa;border-left:3px solid #e96614;padding:7px 9px;color:#4b5563}.pdf-report aside strong{margin-right:7px;color:#111827}.pdf-report footer{margin-top:7px;color:#7a8497;font-size:8pt}.analysis-header{display:flex;justify-content:space-between;gap:20px}.analysis-header span{color:#e96614;font-weight:800;letter-spacing:.12em}.analysis-header h2{font-size:17pt;margin:2px 0}.analysis-overview{break-inside:avoid-page}.analysis-overview,.analysis-section{border:1px solid #dfe3ea;border-radius:12px;padding:11px 13px;margin-bottom:8px}.analysis-empty-section{break-inside:avoid-page;page-break-inside:avoid}.analysis-overview h3,.analysis-section h3{break-after:avoid-page;page-break-after:avoid;margin:0 0 5px}.analysis-overview p,.analysis-section p{margin:0}.analysis-section ul{break-before:avoid-page;page-break-before:avoid;list-style:none;margin:0;padding:0}.analysis-section li{display:block;break-inside:avoid-page;page-break-inside:avoid;border-top:1px solid #e6e9ef;padding:7px 0}.analysis-section li:first-child{break-before:avoid-page;page-break-before:avoid;border-top:0}.analysis-section li small{display:block;color:#667085;margin-top:2px}.analysis-empty{color:#7a8497}.pdf-empty{padding:24px;border:1px dashed #cfd5df;border-radius:12px;text-align:center;color:#667085}.pdf-footer{border-top:1px solid #dfe3ea;margin-top:16px;padding-top:8px;color:#7a8497;font-size:8pt}@media print{button{display:none}}
-  </style></head><body><button onclick="window.print()">Save as PDF</button><header class="pdf-heading"><div class="brand"><span class="brand-mark">L&amp;A</span><div><strong>Construction Manager</strong><small>Daily field reporting</small></div></div><div><h1>${escapeHtml(title)}</h1><span>${escapeHtml(subtitle)}</span></div></header>${body}<footer class="pdf-footer">Generated from L&amp;A Construction Manager</footer><script>setTimeout(()=>{window.focus();window.print()},350)<\/script></body></html>`);
+    @page{size:letter;margin:.48in}*{box-sizing:border-box}body{margin:0;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-size:9.7pt;line-height:1.4}button{position:fixed;right:18px;top:18px;border:0;border-radius:9px;background:#e96614;color:#fff;padding:11px 16px;font-weight:800;cursor:pointer}.pdf-heading{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #e96614;padding-bottom:13px;margin-bottom:17px}.brand{display:flex;align-items:center;gap:10px}.brand-mark{display:grid;place-items:center;width:44px;height:44px;border:2px solid #e96614;border-radius:12px;font-weight:900}.brand strong{display:block;font-size:15pt}.brand small,.pdf-heading>div:last-child{color:#667085}.pdf-heading>div:last-child{text-align:right}.pdf-heading h1{font-size:19pt;margin:3px 0}.pdf-group{break-inside:avoid-page;margin:0 0 20px}.pdf-group>header{display:flex;justify-content:space-between;gap:16px;align-items:end;background:#152238;color:#fff;border-radius:12px;padding:11px 14px;margin-bottom:8px}.pdf-group h2{font-size:14pt;margin:0}.pdf-group header small{color:#d8deea}.pdf-report{break-inside:avoid;border:1px solid #dfe3ea;border-radius:12px;padding:12px 14px;margin:0 0 8px}.pdf-report header{display:flex;justify-content:space-between;gap:15px;border-bottom:1px solid #e6e9ef;padding-bottom:7px}.pdf-report h3{margin:0;font-size:11pt}.pdf-report header small{color:#667085}.pdf-report header span{background:#fff2e9;color:#c95108;border-radius:999px;padding:4px 9px;font-size:8pt;font-weight:800}.pdf-report p{white-space:pre-wrap;margin:9px 0}.pdf-report aside{background:#f5f7fa;border-left:3px solid #e96614;padding:7px 9px;color:#4b5563}.pdf-report aside strong{margin-right:7px;color:#111827}.pdf-report footer{margin-top:7px;color:#7a8497;font-size:8pt}.pdf-report-photos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:10px 0;break-inside:avoid-page}.pdf-report-photos figure{margin:0;break-inside:avoid}.pdf-report-photos img{display:block;width:100%;height:180px;object-fit:cover;border-radius:8px}.pdf-photo-appendix{break-before:page}.analysis-header{display:flex;justify-content:space-between;gap:20px}.analysis-header span{color:#e96614;font-weight:800;letter-spacing:.12em}.analysis-header h2{font-size:17pt;margin:2px 0}.analysis-overview{break-inside:avoid-page}.analysis-overview,.analysis-section{border:1px solid #dfe3ea;border-radius:12px;padding:11px 13px;margin-bottom:8px}.analysis-empty-section{break-inside:avoid-page;page-break-inside:avoid}.analysis-overview h3,.analysis-section h3{break-after:avoid-page;page-break-after:avoid;margin:0 0 5px}.analysis-overview p,.analysis-section p{margin:0}.analysis-section ul{break-before:avoid-page;page-break-before:avoid;list-style:none;margin:0;padding:0}.analysis-section li{display:block;break-inside:avoid-page;page-break-inside:avoid;border-top:1px solid #e6e9ef;padding:7px 0}.analysis-section li:first-child{break-before:avoid-page;page-break-before:avoid;border-top:0}.analysis-section li small{display:block;color:#667085;margin-top:2px}.analysis-empty{color:#7a8497}.pdf-empty{padding:24px;border:1px dashed #cfd5df;border-radius:12px;text-align:center;color:#667085}.pdf-footer{border-top:1px solid #dfe3ea;margin-top:16px;padding-top:8px;color:#7a8497;font-size:8pt}@media print{button{display:none}}
+  </style></head><body><button onclick="window.print()">Save as PDF</button><header class="pdf-heading"><div class="brand"><span class="brand-mark">L&amp;A</span><div><strong>Construction Manager</strong><small>Daily field reporting</small></div></div><div><h1>${escapeHtml(title)}</h1><span>${escapeHtml(subtitle)}</span></div></header>${body}<footer class="pdf-footer">Generated from L&amp;A Construction Manager</footer><script>Promise.race([Promise.all([...document.images].map((image)=>image.complete?Promise.resolve():new Promise((resolve)=>{image.onload=image.onerror=resolve}))),new Promise((resolve)=>setTimeout(resolve,4000))]).then(()=>{window.focus();window.print()})<\/script></body></html>`);
   printWindow.document.close();
 }
 
@@ -269,6 +293,9 @@ export function createReportsModule({ supabase, session, companyId, membership, 
   const reportText = document.querySelector("#reportText");
   const recordButton = document.querySelector("#recordReportButton");
   const recordingStatus = document.querySelector("#recordingStatus");
+  const photoInput = document.querySelector("#reportPhotos");
+  const photoHelp = document.querySelector("#reportPhotoHelp");
+  const photoPreview = document.querySelector("#reportPhotoPreview");
   const employeePdfButton = document.querySelector("#employeeReportsPdfButton");
   const projectPdfButton = document.querySelector("#projectReportsPdfButton");
   const summaryPdfButton = document.querySelector("#summaryPdfButton");
@@ -281,6 +308,14 @@ export function createReportsModule({ supabase, session, companyId, membership, 
   let audioChunks = [];
   let savedSummaryValue = "";
   let pendingVoiceUsage = null;
+
+  function renderSelectedPhotoPreview() {
+    const files = [...(photoInput.files || [])];
+    photoHelp.textContent = files.length ? `${files.length} photo${files.length === 1 ? "" : "s"} selected. They will be saved with this report.` : "Choose several jobsite photos. Up to 20 MB each.";
+    photoPreview.innerHTML = files.map((file) => `<span title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>`).join("");
+  }
+
+  photoInput.addEventListener("change", renderSelectedPhotoPreview);
 
   function projectFor(report) { return projects.find((project) => project.id === report.project_id); }
 
@@ -315,7 +350,9 @@ export function createReportsModule({ supabase, session, companyId, membership, 
   function exportSummaryPdf() {
     try {
       if (!savedSummaryValue) throw new Error("Create the AI daily analysis first.");
-      openPdfPrintView({ title: "AI end-of-day analysis", subtitle: formatReportDate(filterDate.value), body: renderDailySummary(savedSummaryValue) });
+      const photoReports = reports.filter((report) => reportPhotos(report).length);
+      const appendix = photoReports.length ? `<section class="pdf-photo-appendix"><h2>Daily report photos</h2>${photoReports.map((report) => printableReport(report, projectFor(report), "Project", projectFor(report)?.name || "General")).join("")}</section>` : "";
+      openPdfPrintView({ title: "AI end-of-day analysis", subtitle: formatReportDate(filterDate.value), body: `${renderDailySummary(savedSummaryValue)}${appendix}` });
     } catch (error) { showPdfError(error); }
   }
 
@@ -425,13 +462,29 @@ export function createReportsModule({ supabase, session, companyId, membership, 
   }
 
   async function loadPriorOpenTasks() {
-    const { data, error } = await supabase.from("daily_report_summaries")
-      .select("report_date,english_summary")
-      .eq("company_id", companyId)
-      .lte("report_date", filterDate.value)
-      .order("report_date", { ascending: true });
-    if (error) throw new Error("Previous open tasks could not be loaded.");
-    return buildPriorOpenTasks(data || [], filterDate.value);
+    const [summaryResult, taskResult] = await Promise.all([
+      supabase.from("daily_report_summaries").select("report_date,english_summary").eq("company_id", companyId).lte("report_date", filterDate.value).order("report_date", { ascending: true }),
+      supabase.from("work_tasks").select("id,legacy_key,project_id,details,source_date,status").eq("company_id", companyId).lte("source_date", filterDate.value),
+    ]);
+    if (summaryResult.error) throw new Error("Previous open tasks could not be loaded.");
+    const legacyTasks = buildPriorOpenTasks(summaryResult.data || [], filterDate.value);
+    if (taskResult.error) return legacyTasks;
+    const databaseTasks = taskResult.data || [];
+    const databaseByLegacyKey = new Map(databaseTasks.filter((task) => task.legacy_key).map((task) => [task.legacy_key, task]));
+    const openDatabaseTasks = databaseTasks.filter((task) => !["completed", "cancelled"].includes(task.status)).map((task) => ({
+      project: projects.find((project) => project.id === task.project_id)?.name || "General",
+      details: task.details,
+      reported_by: [],
+      source_date: task.source_date,
+      carryover_id: task.legacy_key || `task:${task.id}`,
+    }));
+    const merged = new Map(openDatabaseTasks.map((task) => [taskSignature(task), task]));
+    legacyTasks.forEach((task) => {
+      const databaseVersion = databaseByLegacyKey.get(task.carryover_id);
+      if (databaseVersion && ["completed", "cancelled"].includes(databaseVersion.status)) return;
+      if (!merged.has(taskSignature(task))) merged.set(taskSignature(task), task);
+    });
+    return [...merged.values()];
   }
 
   async function loadProjects() {
@@ -440,25 +493,71 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     projectSelect.innerHTML = '<option value="">General / no project</option>' + projects.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("");
   }
 
+  async function attachSignedPhotoUrls(rows) {
+    const photos = rows.flatMap((report) => Array.isArray(report.report_photos) ? report.report_photos : []);
+    await Promise.all(photos.map(async (photo) => {
+      const { data } = await supabase.storage.from("report-photos").createSignedUrl(photo.storage_path, 3600);
+      photo.signed_url = data?.signedUrl || "";
+    }));
+  }
+
+  function safePhotoName(name) {
+    const extension = String(name || "photo.jpg").split(".").pop().toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    const stem = String(name || "photo").replace(/\.[^.]+$/, "").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 45) || "photo";
+    return `${stem}.${extension}`;
+  }
+
+  async function uploadReportPhotos(reportId, projectId, files) {
+    const failures = [];
+    for (const file of files) {
+      if (!String(file.type || "").startsWith("image/")) { failures.push(`${file.name}: not an image`); continue; }
+      if (file.size > 20 * 1024 * 1024) { failures.push(`${file.name}: larger than 20 MB`); continue; }
+      const uniqueId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const storagePath = `${companyId}/${reportId}/${uniqueId}-${safePhotoName(file.name)}`;
+      const upload = await supabase.storage.from("report-photos").upload(storagePath, file, { contentType: file.type, upsert: false });
+      if (upload.error) { failures.push(`${file.name}: upload failed`); continue; }
+      const metadata = await supabase.from("report_photos").insert({
+        company_id: companyId,
+        report_id: reportId,
+        project_id: projectId || null,
+        storage_path: storagePath,
+        file_name: file.name,
+        mime_type: file.type,
+        file_size: file.size,
+        uploaded_by: session.user.id,
+      });
+      if (metadata.error) {
+        await supabase.storage.from("report-photos").remove([storagePath]);
+        failures.push(`${file.name}: could not be attached`);
+      }
+    }
+    return failures;
+  }
+
   async function loadReports() {
     message.hidden = true;
-    const { data, error } = await supabase.from("daily_reports").select("*").eq("company_id", companyId).eq("report_date", filterDate.value).order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("daily_reports").select("*,report_photos(*)").eq("company_id", companyId).eq("report_date", filterDate.value).order("created_at", { ascending: false });
     if (error) { message.textContent = "Reports could not be loaded."; message.hidden = false; return; }
     reports = data || [];
+    await attachSignedPhotoUrls(reports);
     list.innerHTML = reports.length ? reports.map((r) => {
       const project = projects.find((p) => p.id === r.project_id);
       const canDelete = canManage || r.reporter_id === session.user.id;
       const structured = parseDailySummary(r.english_summary);
-      return `<article class="workspace-card report-card"><header><div><strong>${escapeHtml(r.reporter_name)}</strong><small>${escapeHtml(r.reporter_email || "")}</small></div><div class="report-card-actions"><span>${escapeHtml(project?.name || "General")}</span>${canDelete ? `<button class="report-delete-button" type="button" data-delete-report="${r.id}">Delete</button>` : ""}</div></header><div class="report-english report-english-only"><p>${escapeHtml(r.english_text)}</p>${renderStructuredReport(r.english_summary)}${renderAiUsage(structured?.ai_usage)}</div></article>`;
+      return `<article class="workspace-card report-card"><header><div><strong>${escapeHtml(r.reporter_name)}</strong><small>${escapeHtml(r.reporter_email || "")}</small></div><div class="report-card-actions"><span>${escapeHtml(project?.name || "General")}</span>${canDelete ? `<button class="report-delete-button" type="button" data-delete-report="${r.id}">Delete</button>` : ""}</div></header><div class="report-english report-english-only"><p>${escapeHtml(r.english_text)}</p>${renderStructuredReport(r.english_summary)}${renderAiUsage(structured?.ai_usage)}${renderReportPhotos(r)}</div></article>`;
     }).join("") : '<div class="empty-projects">No reports were submitted for this date.</div>';
     list.querySelectorAll("[data-delete-report]").forEach((button) => {
       button.addEventListener("click", () => deleteReport(button.dataset.deleteReport, button));
     });
-    const { data: saved } = await supabase.from("daily_report_summaries").select("english_summary").eq("company_id", companyId).eq("report_date", filterDate.value).maybeSingle();
+    const [savedResult, taskStatusResult] = await Promise.all([
+      supabase.from("daily_report_summaries").select("english_summary").eq("company_id", companyId).eq("report_date", filterDate.value).maybeSingle(),
+      supabase.from("work_tasks").select("id,legacy_key,status,updated_at").eq("company_id", companyId),
+    ]);
+    const saved = savedResult.data;
     savedSummaryValue = saved?.english_summary || "";
     summary.innerHTML = "";
     summary.hidden = !saved;
-    if (saved) summary.innerHTML = renderDailySummary(saved.english_summary);
+    if (saved) summary.innerHTML = renderDailySummary(taskStatusResult.error ? saved.english_summary : applyDatabaseTaskStatuses(saved.english_summary, taskStatusResult.data || []));
     setPdfAvailability();
   }
 
@@ -491,12 +590,19 @@ export function createReportsModule({ supabase, session, companyId, membership, 
       const name = membership.full_name || session.user.user_metadata?.full_name || session.user.email.split("@")[0];
       const structuredReport = translated.structured_report || translated;
       structuredReport.ai_usage = translated.ai_usage || null;
-      const { error } = await supabase.from("daily_reports").insert({ company_id: companyId, project_id: projectSelect.value || null, reporter_id: session.user.id, reporter_name: name, reporter_email: membership.email || session.user.email, report_date: reportDate.value, original_text: text, english_text: translated.english_text, english_summary: JSON.stringify(structuredReport) });
+      const selectedPhotos = [...(photoInput.files || [])];
+      const { data: savedReport, error } = await supabase.from("daily_reports").insert({ company_id: companyId, project_id: projectSelect.value || null, reporter_id: session.user.id, reporter_name: name, reporter_email: membership.email || session.user.email, report_date: reportDate.value, original_text: text, english_text: translated.english_text, english_summary: JSON.stringify(structuredReport) }).select("id").single();
       if (error) throw error;
+      button.textContent = selectedPhotos.length ? "Uploading photos..." : "Saving report...";
+      const photoFailures = selectedPhotos.length ? await uploadReportPhotos(savedReport.id, projectSelect.value, selectedPhotos) : [];
       reportText.value = ""; filterDate.value = reportDate.value; await loadReports();
+      photoInput.value = "";
+      renderSelectedPhotoPreview();
       pendingVoiceUsage = null;
-      message.textContent = `Report saved successfully.${formatAiUsage(structuredReport.ai_usage) ? ` AI usage: ${formatAiUsage(structuredReport.ai_usage)}.` : ""}`;
-      message.classList.remove("message-error");
+      message.textContent = photoFailures.length
+        ? `Report saved, but ${photoFailures.length} photo${photoFailures.length === 1 ? "" : "s"} could not be attached. ${photoFailures.join("; ")}.`
+        : `Report saved successfully${selectedPhotos.length ? ` with ${selectedPhotos.length} photo${selectedPhotos.length === 1 ? "" : "s"}` : ""}.${formatAiUsage(structuredReport.ai_usage) ? ` AI usage: ${formatAiUsage(structuredReport.ai_usage)}.` : ""}`;
+      message.classList.toggle("message-error", photoFailures.length > 0);
       message.hidden = false;
     } catch (error) { message.textContent = error.message || "The report could not be saved."; message.classList.add("message-error"); message.hidden = false; }
     finally { button.disabled = false; button.textContent = "Save report"; }

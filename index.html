@@ -8,8 +8,8 @@
     <title>Sign in | L&A Construction Manager</title>
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/login.css">
-    <link rel="stylesheet" href="/css/dashboard.css">
-    <script type="module" src="/js/app.js?v=20260806-7"></script>
+    <link rel="stylesheet" href="/css/dashboard.css?v=20260820-operations-photos-1">
+    <script type="module" src="/js/app.js?v=20260820-operations-photos-1"></script>
   </head>
   <body>
     <main id="loginView" class="login-layout">
@@ -67,6 +67,7 @@
           <div><strong>Construction</strong><span>Manager</span></div>
         </div>
         <nav aria-label="Main navigation">
+          <span class="nav-section-label">Overview</span>
           <a class="nav-item is-active" href="#dashboard" aria-current="page">
             <span aria-hidden="true">⌂</span> Dashboard
           </a>
@@ -76,9 +77,18 @@
           <a id="reportsNav" class="nav-item" href="#reports">
             <span aria-hidden="true">≡</span> Reports
           </a>
+          <span class="nav-section-label">Operations</span>
           <a id="tasksNav" class="nav-item" href="#tasks">
             <span aria-hidden="true">✓</span> Tasks
           </a>
+          <a class="nav-item" href="#schedule"><span aria-hidden="true">□</span> Schedule</a>
+          <a class="nav-item" href="#materials"><span aria-hidden="true">◇</span> Materials</a>
+          <a class="nav-item" href="#inspections"><span aria-hidden="true">⌕</span> Inspections</a>
+          <a class="nav-item" href="#labor"><span aria-hidden="true">◷</span> Labor</a>
+          <span class="nav-section-label">Company</span>
+          <a class="nav-item" href="#subcontractors"><span aria-hidden="true">♢</span> Subcontractors</a>
+          <a class="nav-item" href="#files"><span aria-hidden="true">▤</span> Files &amp; Photos</a>
+          <a class="nav-item" href="#alerts"><span aria-hidden="true">!</span> Alerts <b id="alertCount" class="nav-count">0</b></a>
           <a id="teamNav" class="nav-item" href="#team">
             <span aria-hidden="true">♙</span> Users
           </a>
@@ -125,12 +135,14 @@
             <strong class="status-value">Online</strong>
             <span class="metric-note">Supabase connected</span>
           </article>
+          <article class="metric-card"><span class="metric-label">Open tasks</span><strong id="dashboardOpenTasks">—</strong><span class="metric-note">Independent Task Manager</span></article>
+          <article class="metric-card"><span class="metric-label">Materials pending</span><strong id="dashboardMaterials">—</strong><span class="metric-note">Needed or ordered</span></article>
+          <article class="metric-card"><span class="metric-label">Upcoming inspections</span><strong id="dashboardInspections">—</strong><span class="metric-note">Scheduled from today</span></article>
         </section>
 
-        <section class="empty-card">
-          <div class="empty-icon" aria-hidden="true">⌂</div>
-          <h2>Dashboard foundation is ready</h2>
-          <p>Projects, reports, time clock, and team tools will appear here as their modules are added.</p>
+        <section class="project-health-section">
+          <header class="section-heading"><div><p class="eyebrow">Live project overview</p><h2>Project status</h2></div><small>Tasks, purchasing and inspections</small></header>
+          <div id="projectHealthGrid" class="project-health-grid"></div>
         </section>
       </section>
 
@@ -182,6 +194,14 @@
                 <button id="recordReportButton" class="voice-report-button" type="button"><span aria-hidden="true">🎙</span> Start voice report</button>
                 <p id="recordingStatus" class="recording-status" role="status">Speak in Persian or English. The English report will appear above.</p>
               </div>
+              <label for="reportPhotos">Job photos (optional)</label>
+              <label class="report-photo-picker" for="reportPhotos">
+                <input id="reportPhotos" type="file" accept="image/*" multiple>
+                <span aria-hidden="true">＋</span>
+                <strong>Add photos</strong>
+                <small id="reportPhotoHelp">Choose several jobsite photos. Up to 20 MB each.</small>
+              </label>
+              <div id="reportPhotoPreview" class="report-photo-preview" aria-live="polite"></div>
               <button id="submitReportButton" class="primary-button" type="submit">Save report</button>
             </form>
           </section>
@@ -226,6 +246,82 @@
           <section class="workspace-card ai-task-section materials-section"><header><p class="eyebrow">Purchasing</p><h2>Materials to order</h2></header><div id="materialTasksList" class="ai-task-list"></div></section>
         </div>
         <details class="workspace-card completed-task-section"><summary>Completed tasks from later reports</summary><div id="completedTasksList" class="ai-task-list"></div></details>
+      </section>
+
+      <section id="scheduleView" class="dashboard-content" aria-labelledby="scheduleTitle" hidden>
+        <header class="dashboard-header"><div><p class="eyebrow">Company calendar</p><h1 id="scheduleTitle">Schedule</h1></div></header>
+        <div id="scheduleMessage" class="message" role="status" hidden></div>
+        <div class="operations-layout">
+          <section id="scheduleFormCard" class="workspace-card operations-form-card"><h2>Add calendar item</h2><form id="scheduleForm">
+            <label>Project<select id="scheduleProject"></select></label><label class="wide-field">Title<input id="scheduleTitleInput" required placeholder="What is scheduled?"></label>
+            <label>Type<select id="scheduleType"><option value="work">Work</option><option value="inspection">Inspection</option><option value="delivery">Delivery</option><option value="meeting">Meeting</option><option value="other">Other</option></select></label>
+            <label>Date<input id="scheduleDate" type="date" required></label><label>Time<input id="scheduleTime" type="time"></label><label>Assigned to<select id="scheduleAssignee"></select></label>
+            <label class="wide-field">Notes<input id="scheduleNotes"></label><button class="primary-button" type="submit">Add to calendar</button>
+          </form></section>
+          <section class="workspace-card"><h2>Work, inspections &amp; deliveries</h2><div id="scheduleList" class="operations-list"></div></section>
+        </div>
+      </section>
+
+      <section id="materialsView" class="dashboard-content" aria-labelledby="materialsTitle" hidden>
+        <header class="dashboard-header"><div><p class="eyebrow">Purchasing control</p><h1 id="materialsTitle">Materials</h1></div></header>
+        <div id="materialsMessage" class="message" role="status" hidden></div>
+        <div class="operations-layout">
+          <section id="materialFormCard" class="workspace-card operations-form-card"><h2>Add material</h2><form id="materialForm">
+            <label>Project<select id="materialProject"></select></label><label class="wide-field">Material<input id="materialName" required placeholder="Material name"></label><label>Quantity<input id="materialQuantity"></label>
+            <label>Vendor<input id="materialVendor"></label><label>Needed by<input id="materialNeededBy" type="date"></label><label>Status<select id="materialStatus"><option value="needed">Needed</option><option value="ordered">Ordered</option><option value="delivered">Delivered</option></select></label>
+            <label class="wide-field">Notes<input id="materialNotes"></label><button class="primary-button" type="submit">Add material</button>
+          </form></section>
+          <section><div id="materialsList" class="management-grid"></div></section>
+        </div>
+      </section>
+
+      <section id="inspectionsView" class="dashboard-content" aria-labelledby="inspectionsTitle" hidden>
+        <header class="dashboard-header"><div><p class="eyebrow">Inspection calendar</p><h1 id="inspectionsTitle">Inspections</h1></div><label class="month-filter">Month<input id="inspectionMonth" type="month"></label></header>
+        <div id="inspectionsMessage" class="message" role="status" hidden></div>
+        <div class="operations-layout">
+          <section id="inspectionFormCard" class="workspace-card operations-form-card"><h2>Schedule inspection</h2><form id="inspectionForm">
+            <label>Project<select id="inspectionProject"></select></label><label class="wide-field">Inspection type<input id="inspectionType" required placeholder="Foundation, framing, rough plumbing..."></label><label>Date<input id="inspectionDate" type="date" required></label>
+            <label>Time<input id="inspectionTime" type="time"></label><label>Inspector<input id="inspectionInspector"></label><label class="wide-field">Notes<input id="inspectionNotes"></label><button class="primary-button" type="submit">Schedule inspection</button>
+          </form></section>
+          <section class="workspace-card"><h2>Monthly inspection calendar</h2><div id="inspectionsList" class="inspection-list"></div></section>
+        </div>
+      </section>
+
+      <section id="laborView" class="dashboard-content" aria-labelledby="laborTitle" hidden>
+        <header class="dashboard-header"><div><p class="eyebrow">Employee time &amp; labor</p><h1 id="laborTitle">Labor</h1></div><label class="month-filter">Work date<input id="laborDateFilter" type="date"></label></header>
+        <div id="laborMessage" class="message" role="status" hidden></div>
+        <div class="operations-layout">
+          <section class="workspace-card operations-form-card"><h2>Add labor</h2><form id="laborForm">
+            <label>Employee<select id="laborEmployee"></select></label><label>Project<select id="laborProject"></select></label><label>Date<input id="laborDate" type="date" required></label><label>Hours<input id="laborHours" type="number" min="0.25" max="24" step="0.25" required></label>
+            <label>Trade / work<input id="laborTrade"></label><label class="wide-field">Notes<input id="laborNotes"></label><button class="primary-button" type="submit">Save labor</button>
+          </form></section>
+          <section class="workspace-card"><header class="section-heading"><h2>Daily labor</h2><strong id="laborTotal">0 hours</strong></header><div id="laborList" class="operations-list"></div></section>
+        </div>
+      </section>
+
+      <section id="subcontractorsView" class="dashboard-content" aria-labelledby="subcontractorsTitle" hidden>
+        <header class="dashboard-header"><div><p class="eyebrow">Trade partners</p><h1 id="subcontractorsTitle">Subcontractors</h1></div></header>
+        <div id="subcontractorsMessage" class="message" role="status" hidden></div>
+        <div class="operations-layout">
+          <section id="subcontractorFormCard" class="workspace-card operations-form-card"><h2>Add subcontractor</h2><form id="subcontractorForm">
+            <label class="wide-field">Company<input id="subcontractorCompany" required></label><label>Contact<input id="subcontractorContact"></label><label>Trade<input id="subcontractorTrade"></label><label>Phone<input id="subcontractorPhone" type="tel"></label>
+            <label>Email<input id="subcontractorEmail" type="email"></label><label>Insurance expiration<input id="subcontractorInsurance" type="date"></label><label class="wide-field">Notes<input id="subcontractorNotes"></label><button class="primary-button" type="submit">Add subcontractor</button>
+          </form></section>
+          <section><div id="subcontractorsList" class="management-grid"></div></section>
+        </div>
+      </section>
+
+      <section id="filesView" class="dashboard-content" aria-labelledby="filesTitle" hidden>
+        <header class="dashboard-header"><div><p class="eyebrow">Project library</p><h1 id="filesTitle">Files, Plans &amp; Photos</h1></div></header>
+        <div id="filesMessage" class="message" role="status" hidden></div>
+        <section id="libraryUploadCard" class="workspace-card operations-form-card"><h2>Upload files</h2><form id="libraryUploadForm">
+          <label>Project<select id="libraryProject" required></select></label><label>Category<select id="libraryCategory"><option value="photos">Photos</option><option value="plans">Plans</option><option value="documents">Documents</option></select></label><label>Date<input id="libraryDate" type="date"></label><label>Location / area<input id="libraryLocation" placeholder="Kitchen, front yard..."></label><label class="wide-field">Description<input id="libraryDescription" placeholder="What does this file or photo show?"></label><label class="wide-field">Choose files<input id="libraryFiles" type="file" multiple required></label><button class="primary-button" type="submit">Upload</button>
+        </form></section><div id="filesLibraryList" class="management-grid files-library"></div>
+      </section>
+
+      <section id="alertsView" class="dashboard-content" aria-labelledby="alertsTitle" hidden>
+        <header class="dashboard-header"><div><p class="eyebrow">Automatic notifications</p><h1 id="alertsTitle">Alerts</h1></div></header>
+        <div id="alertsMessage" class="message" role="status" hidden></div><section class="workspace-card"><div id="alertsList" class="alerts-list"></div></section>
       </section>
 
       <section id="teamView" class="dashboard-content" aria-labelledby="teamTitle" hidden>
