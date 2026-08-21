@@ -2,7 +2,7 @@ function json(statusCode, body) {
   return new Response(JSON.stringify(body), { status: statusCode, headers: { "content-type": "application/json" } });
 }
 
-const REPORT_AI_VERSION = "2026-08-17-usage-v12";
+const REPORT_AI_VERSION = "2026-08-20-task-sync-v13";
 
 const TEXT_MODEL_PRICING = [
   { pattern: /^gpt-4\.1-mini(?:-|$)/i, input: 0.40, cachedInput: 0.10, output: 1.60 },
@@ -169,6 +169,29 @@ function completedClauses(value) {
     });
 }
 
+function futureDates(value, referenceDate) {
+  if (!referenceDate) return [];
+  const reference = new Date(`${referenceDate}T23:59:59`);
+  if (Number.isNaN(reference.getTime())) return [];
+  const dates = [];
+  const addIfFuture = (year, month, day, original) => {
+    const date = new Date(Number(year), Number(month) - 1, Number(day), 12);
+    if (!Number.isNaN(date.getTime()) && date > reference) dates.push(original);
+  };
+  String(value || "").replace(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/g, (original, month, day, year) => {
+    addIfFuture(year, month, day, original);
+    return original;
+  }).replace(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g, (original, year, month, day) => {
+    addIfFuture(year, month, day, original);
+    return original;
+  });
+  return dates;
+}
+
+function hasFutureDate(value, referenceDate) {
+  return futureDates(value, referenceDate).length > 0;
+}
+
 function atomicSummaryItems(item) {
   const details = String(item?.details || "").trim();
   if (!INSPECTION_EVIDENCE.test(details)) return details ? [{ ...item, details }] : [];
@@ -180,18 +203,27 @@ function atomicSummaryItems(item) {
     .map((part) => ({ ...item, details: part }));
 }
 
-function sanitizeReport(report) {
-  const completed = (Array.isArray(report.completed) ? report.completed : []).flatMap(completedClauses);
-  return { ...report, completed };
+function sanitizeReport(report, reportDate = "") {
+  const completed = (Array.isArray(report.completed) ? report.completed : [])
+    .flatMap(completedClauses)
+    .filter((item) => !hasFutureDate(item, reportDate));
+  const inspection = Array.isArray(report.inspection) ? report.inspection.filter(Boolean) : [];
+  const nextActions = Array.isArray(report.next_actions) ? report.next_actions.filter(Boolean) : [];
+  inspection.filter((item) => hasFutureDate(item, reportDate)).forEach((item) => {
+    if (!nextActions.some((action) => sameTask(action, item))) nextActions.push(item);
+  });
+  return { ...report, completed, inspection, next_actions: nextActions };
 }
 
-function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
+function sanitizeSummary(summary, priorTasks = [], submittedReports = [], reportDate = "") {
   const completedWork = (Array.isArray(summary.completed_work) ? summary.completed_work : []).flatMap(atomicSummaryItems).flatMap((item) => {
+    if (hasFutureDate(`${item?.details || ""} ${item?.evidence || ""}`, reportDate)) return [];
     const clauses = completedClauses(item?.details);
     return clauses.length ? [{ ...item, details: clauses.join(" ") }] : [];
   });
   submittedReports.forEach((report) => {
     completedClauses(report?.report || "").forEach((evidence) => {
+      if (hasFutureDate(evidence, reportDate)) return;
       const item = { project: report.project || "General", details: evidence, reported_by: [report.submitted_by].filter(Boolean), evidence };
       if (!summaryItemAlreadyIncluded(completedWork, item)) completedWork.push(item);
     });
@@ -235,6 +267,24 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
     resolvedPriorTasks.push({ carryover_id: task.carryover_id, evidence: evidence.trim() });
   });
   const tomorrowPlan = (Array.isArray(summary.tomorrow_plan) ? summary.tomorrow_plan : []).filter((item) => !item?.carryover_id || !resolvedIds.has(item.carryover_id));
+  submittedReports.forEach((report) => {
+    (Array.isArray(report?.structured_next_actions) ? report.structured_next_actions : []).forEach((nextAction) => {
+      const details = String(nextAction?.details || nextAction || "").trim();
+      if (!details) return;
+      const candidate = {
+        project: report.project || "General",
+        details,
+        reported_by: [report.submitted_by].filter(Boolean),
+        evidence: details,
+        source: "today",
+        source_date: report.report_date || reportDate || null,
+        carryover_id: null,
+      };
+      const explicitlyCompleted = completedWork.some((item) => sameProject(item?.project, candidate.project)
+        && sameTask(details, `${item?.details || ""} ${item?.evidence || ""}`));
+      if (!explicitlyCompleted && !summaryItemAlreadyIncluded(tomorrowPlan, candidate)) tomorrowPlan.push(candidate);
+    });
+  });
   const includedIds = new Set(tomorrowPlan.map((item) => item?.carryover_id).filter(Boolean));
   const requiredCarryovers = priorTasks.filter((task) => task?.carryover_id && !resolvedIds.has(task.carryover_id) && !includedIds.has(task.carryover_id)).map((task) => ({
     project: task.project || "General",
@@ -312,7 +362,7 @@ function sanitizeSummary(summary, priorTasks = [], submittedReports = []) {
   return { ...summary, completed_work: completedWork, blockers_and_delays: blockersAndDelays, inspections, tomorrow_plan: finalTomorrowPlan, labor, materials_needed: finalMaterialsNeeded, overdue_work: overdueWork, risks, resolved_prior_tasks: resolvedPriorTasks };
 }
 
-export { aiUsage, sanitizeSummary };
+export { aiUsage, hasFutureDate, sanitizeReport, sanitizeSummary };
 
 const CONSTRUCTION_GLOSSARY = `
 Apply this L&A Custom Homes glossary exactly:
@@ -369,13 +419,13 @@ export default async (request) => {
 Never invent facts, assumptions, safety events, delays, or tomorrow tasks. Preserve exact names, project names, quantities, times, dates, and construction terms. Use normal name capitalization without changing the name. Merge duplicate facts only when they clearly describe the same work. Never combine unrelated tasks, inspections, deliveries, or issues into one item. If reports conflict, keep both facts and identify their reporters.
 Treat every fact as one atomic statement. Categories are not mutually exclusive: the same supported fact must appear in every category it affects. For example, "order soft filler" is both a tomorrow/open task and a material need; a broken planer causing idle labor is both a labor fact and a blocker. For every categorized item, evidence must be a short exact excerpt copied from a submitted report. Never use AI-written wording as evidence.
 Classification rules:
-- Completed work must be explicitly finished, completed, passed, delivered, or performed. Work that only started, began, is underway, is scheduled, or remains pending is not completed. Every completed_work details string may contain only completed facts; remove started or pending clauses even when they appear beside completed work in the same source sentence.
+- Completed work must be explicitly finished, completed, passed, delivered, or performed. Work that only started, began, is underway, is scheduled, or remains pending is not completed. Every completed_work details string may contain only completed facts; remove started or pending clauses even when they appear beside completed work in the same source sentence. A future-dated inspection is scheduled or booked work, never completed work.
 - Materials needed contains materials explicitly needed, missing, ordered but not received, awaiting delivery, or that must be ordered, bought, purchased, procured, or sourced. Every open task to order or purchase a material must also appear in materials_needed. Preserve the exact material name from the report or carryover task. A delivered material is not "needed" unless the report explicitly says more is required.
-- Inspections contains only an actual inspection, inspector visit, inspection result, correction notice, or explicitly requested inspection. Do not turn a generic check, installation, removal, reinstallation, repair, or Monday work into an inspection.
+- Inspections contains only an actual inspection, inspector visit, inspection result, correction notice, or explicitly requested or scheduled inspection. Do not turn a generic check, installation, removal, reinstallation, repair, or Monday work into an inspection. Use report_date as the time reference: an inspection booked for a later date belongs in inspections and tomorrow_plan, not completed_work. Persian wording equivalent to "we got/booked an inspection for [date]" means the inspection was scheduled for that date, not conducted.
 - Overdue work requires explicit evidence that work is late, missed, overdue, unfinished past its expected time, or carried over. A general blocker is not automatically overdue.
 - Risks contains only the actual risk, hazard, complaint, or concern. Describe it in natural management English. Never call enforcement, PPE use, a safety meeting, or another corrective action a "safety risk"; include a corrective action only after naming an explicit underlying hazard or noncompliance.
 - Prior open action items are the still-unresolved tasks reconstructed chronologically from all earlier daily summaries, not only the previous day. Use them only to identify tasks explicitly completed today. List those confirmations in resolved_prior_tasks using the exact carryover_id and an exact completion excerpt from today's report. The backend appends every unresolved carryover automatically, so do not repeat unresolved prior tasks in tomorrow_plan. Never treat silence as completion.
-- New explicit next steps from today's reports go in tomorrow_plan with source "today" and source_date set to the submitted report date.
+- New explicit next steps from today's reports go in tomorrow_plan with source "today" and source_date set to the submitted report date. Every item supplied in structured_next_actions is a required same-day next action and must be included unless today's report explicitly confirms that exact work was completed.
 Return only valid JSON with exactly this structure:
 {
   "executive_summary": "A concise overall conclusion for the day.",
@@ -392,7 +442,7 @@ Return only valid JSON with exactly this structure:
 }
 Use empty arrays when a category was not mentioned. Every material item must identify who reported it.`
     : `Detect whether the construction field report is Persian or English. If Persian, translate it into clear professional English. If already English, preserve its meaning and lightly clean grammar only. ${CONSTRUCTION_GLOSSARY}
-Never invent, infer, or fill in missing facts. A task that only started, began, is underway, scheduled, or pending is not completed. Each completed item may contain only completed facts; separate or omit any started or pending clause beside it. A delivered material is not a material need unless more is explicitly required. Only place actual inspections, inspector visits, inspection results, correction notices, or requested inspections under inspection; never turn a generic check or repair into an inspection. Keep unrelated facts as separate items. Describe risks as the underlying hazard or concern, never as PPE enforcement or another corrective action. Return only valid JSON with exactly this structure:
+Never invent, infer, or fill in missing facts. Use report_date as the time reference. A task that only started, began, is underway, scheduled, or pending is not completed. Each completed item may contain only completed facts; separate or omit any started or pending clause beside it. A future-dated inspection is scheduled or booked work: include it in inspection and next_actions, never completed. Persian wording equivalent to "inspection گرفتیم برای [date]" means the inspection was booked for that date, not conducted. A delivered material is not a material need unless more is explicitly required. Only place actual inspections, inspector visits, inspection results, correction notices, or requested or scheduled inspections under inspection; never turn a generic check or repair into an inspection. Keep unrelated facts as separate items. Describe risks as the underlying hazard or concern, never as PPE enforcement or another corrective action. Return only valid JSON with exactly this structure:
 {
   "english_text": "Faithful cleaned English version of the complete report",
   "english_summary": "One concise sentence describing the report",
@@ -404,11 +454,13 @@ Never invent, infer, or fill in missing facts. A task that only started, began, 
 }
 Use an empty array for every category not explicitly mentioned.`;
   const priorOpenTasks = Array.isArray(body.prior_open_tasks) ? body.prior_open_tasks : [];
+  const reportTextInput = String(body.text || "").trim();
+  if (!isSummary && !reportTextInput) return json(400, { error: "Report text is required" });
   const input = isSummary ? JSON.stringify({
     report_date: body.report_date || null,
     reports: body.reports || [],
     prior_open_tasks: priorOpenTasks.map((task) => ({ carryover_id: task.carryover_id, project: task.project, details: task.details })),
-  }) : String(body.text || "");
+  }) : JSON.stringify({ report_date: body.report_date || null, report: reportTextInput });
   if (!input.trim()) return json(400, { error: "Report text is required" });
 
   const model = Netlify.env.get("OPENAI_MODEL") || "gpt-4.1-mini";
@@ -441,7 +493,7 @@ Use an empty array for every category not explicitly mentioned.`;
   const usage = aiUsage(responseData, model, isSummary ? "5_pm_summary" : "daily_report", Date.now() - startedAt);
   if (isSummary) {
     try {
-      const dailySummary = sanitizeSummary(parseModelJson(text), priorOpenTasks, body.reports || []);
+      const dailySummary = sanitizeSummary(parseModelJson(text), priorOpenTasks, body.reports || [], body.report_date || "");
       return json(200, { daily_summary: dailySummary, english_summary: JSON.stringify(dailySummary), ai_usage: usage, processing_version: REPORT_AI_VERSION });
     } catch (error) {
       console.error("Daily analysis JSON failed", error?.message || "Unknown parsing error");
@@ -449,7 +501,7 @@ Use an empty array for every category not explicitly mentioned.`;
     }
   }
   try {
-    const report = sanitizeReport(parseModelJson(text));
+    const report = sanitizeReport(parseModelJson(text), body.report_date || "");
     return json(200, { ...report, structured_report: report, ai_usage: usage, processing_version: REPORT_AI_VERSION });
   } catch {
     return json(502, { error: "The AI report could not be structured. Please try again." });

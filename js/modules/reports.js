@@ -5,6 +5,68 @@ function parseDailySummary(value) {
   try { return JSON.parse(value); } catch { return null; }
 }
 
+function taskSignature(item) {
+  return `${String(item?.project || "General").trim().toLowerCase()}::${String(item?.details || "").trim().toLowerCase().replace(/\s+/g, " ")}`;
+}
+
+export function buildPriorOpenTasks(rows, selectedDate) {
+  const openTasks = new Map();
+  const idsBySignature = new Map();
+  const taskOverrides = {};
+  const manualTasks = new Map();
+
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const summary = parseDailySummary(row.english_summary);
+    if (!summary) return;
+    Object.assign(taskOverrides, summary.task_overrides || {});
+    (Array.isArray(summary.manual_tasks) ? summary.manual_tasks : []).forEach((task) => {
+      if (task?.id && task?.details) manualTasks.set(task.id, task);
+    });
+    if (String(row.report_date || "") >= String(selectedDate || "")) return;
+
+    (Array.isArray(summary.resolved_prior_tasks) ? summary.resolved_prior_tasks : []).forEach(({ carryover_id: carryoverId }) => {
+      const removed = openTasks.get(carryoverId);
+      if (removed) idsBySignature.delete(taskSignature(removed));
+      openTasks.delete(carryoverId);
+    });
+    (Array.isArray(summary.tomorrow_plan) ? summary.tomorrow_plan : []).forEach((item, index) => {
+      if (!item?.details) return;
+      const signature = taskSignature(item);
+      const carryoverId = item.carryover_id || idsBySignature.get(signature) || `${row.report_date}:${index}`;
+      const existing = openTasks.get(carryoverId);
+      if (existing) idsBySignature.delete(taskSignature(existing));
+      const task = {
+        project: item.project || "General",
+        details: item.details,
+        reported_by: item.reported_by || existing?.reported_by || [],
+        source_date: existing?.source_date || item.source_date || row.report_date,
+        carryover_id: carryoverId,
+      };
+      openTasks.set(carryoverId, task);
+      idsBySignature.set(signature, carryoverId);
+    });
+  });
+
+  manualTasks.forEach((task, id) => {
+    const override = taskOverrides[id] || {};
+    if ((override.status || task.status) === "completed") return;
+    openTasks.set(id, {
+      project: task.project || "General",
+      details: task.details,
+      reported_by: [],
+      source_date: task.source_date || selectedDate,
+      carryover_id: id,
+    });
+  });
+  Object.entries(taskOverrides).forEach(([id, override]) => {
+    if (override?.status !== "completed") return;
+    const removed = openTasks.get(id);
+    if (removed) idsBySignature.delete(taskSignature(removed));
+    openTasks.delete(id);
+  });
+  return [...openTasks.values()];
+}
+
 function parseStructuredReport(value) {
   const parsed = parseDailySummary(value);
   return parsed && Array.isArray(parsed.completed) ? parsed : null;
@@ -114,13 +176,20 @@ function dedupeInspectionsForDisplay(items) {
   return [...unique.values()];
 }
 
-function sanitizeAnalysisForDisplay(analysis) {
+export function sanitizeAnalysisForDisplay(analysis) {
+  const completedTaskIds = new Set([
+    ...Object.entries(analysis.task_overrides || {}).filter(([, override]) => override?.status === "completed").map(([id]) => id),
+    ...(Array.isArray(analysis.manual_tasks) ? analysis.manual_tasks.filter((task) => task?.status === "completed").map((task) => task.id) : []),
+  ]);
+  const isCompletedTask = (item) => item?.carryover_id && completedTaskIds.has(item.carryover_id);
   return {
     ...analysis,
     completed_work: (Array.isArray(analysis.completed_work) ? analysis.completed_work : []).flatMap(splitMixedDisplayFacts),
     inspections: dedupeInspectionsForDisplay((Array.isArray(analysis.inspections) ? analysis.inspections : []).flatMap(splitMixedDisplayFacts).filter((item) => DISPLAY_INSPECTION.test(String(item.details || "")))),
     labor: (Array.isArray(analysis.labor) ? analysis.labor : []).filter((item) => !DISPLAY_FUTURE_LABOR.test(`${item?.details || ""} ${item?.evidence || ""}`)),
-    materials_needed: dedupeMaterialsForDisplay(analysis.materials_needed),
+    tomorrow_plan: (Array.isArray(analysis.tomorrow_plan) ? analysis.tomorrow_plan : []).filter((item) => !isCompletedTask(item)),
+    materials_needed: dedupeMaterialsForDisplay((Array.isArray(analysis.materials_needed) ? analysis.materials_needed : []).filter((item) => !isCompletedTask(item))),
+    overdue_work: (Array.isArray(analysis.overdue_work) ? analysis.overdue_work : []).filter((item) => !isCompletedTask(item)),
   };
 }
 
@@ -280,7 +349,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     if (!response.ok) throw new Error(data.error || "The voice report could not be converted to text.");
     const spokenText = String(data.text || "").trim();
     if (!spokenText) throw new Error("No speech was detected. Please try again.");
-    const translated = await callAi({ action: "translate", text: spokenText });
+    const translated = await callAi({ action: "translate", text: spokenText, report_date: reportDate.value });
     pendingVoiceUsage = combineAiUsage(pendingVoiceUsage, data.ai_usage, translated.ai_usage);
     translated.ai_usage = pendingVoiceUsage;
     const englishText = String(translated.english_text || "").trim();
@@ -355,45 +424,14 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     throw new Error("The AI server could not complete the request.");
   }
 
-  function taskSignature(item) {
-    return `${String(item.project || "General").trim().toLowerCase()}::${String(item.details || "").trim().toLowerCase().replace(/\s+/g, " ")}`;
-  }
-
   async function loadPriorOpenTasks() {
     const { data, error } = await supabase.from("daily_report_summaries")
       .select("report_date,english_summary")
       .eq("company_id", companyId)
-      .lt("report_date", filterDate.value)
+      .lte("report_date", filterDate.value)
       .order("report_date", { ascending: true });
     if (error) throw new Error("Previous open tasks could not be loaded.");
-
-    const openTasks = new Map();
-    const idsBySignature = new Map();
-    (data || []).forEach((row) => {
-      const summary = parseDailySummary(row.english_summary);
-      (Array.isArray(summary?.resolved_prior_tasks) ? summary.resolved_prior_tasks : []).forEach(({ carryover_id: carryoverId }) => {
-        const removed = openTasks.get(carryoverId);
-        if (removed) idsBySignature.delete(taskSignature(removed));
-        openTasks.delete(carryoverId);
-      });
-      (Array.isArray(summary?.tomorrow_plan) ? summary.tomorrow_plan : []).forEach((item, index) => {
-        if (!item?.details) return;
-        const signature = taskSignature(item);
-        const carryoverId = item.carryover_id || idsBySignature.get(signature) || `${row.report_date}:${index}`;
-        const existing = openTasks.get(carryoverId);
-        if (existing) idsBySignature.delete(taskSignature(existing));
-        const task = {
-          project: item.project || "General",
-          details: item.details,
-          reported_by: item.reported_by || existing?.reported_by || [],
-          source_date: existing?.source_date || item.source_date || row.report_date,
-          carryover_id: carryoverId,
-        };
-        openTasks.set(carryoverId, task);
-        idsBySignature.set(signature, carryoverId);
-      });
-    });
-    return [...openTasks.values()];
+    return buildPriorOpenTasks(data || [], filterDate.value);
   }
 
   async function loadProjects() {
@@ -449,7 +487,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     if (!text) return;
     button.disabled = true; button.textContent = "Saving report...";
     try {
-      const translated = await callAi({ action: "translate", text });
+      const translated = await callAi({ action: "translate", text, report_date: reportDate.value });
       const name = membership.full_name || session.user.user_metadata?.full_name || session.user.email.split("@")[0];
       const structuredReport = translated.structured_report || translated;
       structuredReport.ai_usage = translated.ai_usage || null;
@@ -474,7 +512,10 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     try {
       const priorOpenTasks = await loadPriorOpenTasks();
       summaryStage = "AI analysis";
-      const data = await callAi({ action: "summarize", report_date: filterDate.value, prior_open_tasks: priorOpenTasks, reports: reports.map((r) => ({ report_date: r.report_date, submitted_by: r.reporter_name, project: projects.find((p) => p.id === r.project_id)?.name || "General", report: r.english_text })) });
+      const data = await callAi({ action: "summarize", report_date: filterDate.value, prior_open_tasks: priorOpenTasks, reports: reports.map((r) => {
+        const structured = parseDailySummary(r.english_summary) || {};
+        return { report_date: r.report_date, submitted_by: r.reporter_name, project: projects.find((p) => p.id === r.project_id)?.name || "General", report: r.english_text, structured_next_actions: Array.isArray(structured.next_actions) ? structured.next_actions : [] };
+      }) });
       message.textContent = "AI analysis finished. Saving the 5 PM summary...";
       const generatedSummary = data.daily_summary && typeof data.daily_summary === "object" ? data.daily_summary : (parseDailySummary(data.english_summary) || {});
       const existingSummary = parseDailySummary(savedSummaryValue) || {};
