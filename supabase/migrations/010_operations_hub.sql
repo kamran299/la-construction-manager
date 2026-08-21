@@ -170,7 +170,7 @@ grant select, insert, update, delete on public.work_tasks, public.schedule_event
 create table if not exists public.report_photos (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.companies(id) on delete cascade,
-  report_id uuid not null references public.daily_reports(id) on delete cascade,
+  report_id uuid not null references public.daily_reports(id) on delete restrict,
   project_id uuid references public.projects(id) on delete set null,
   storage_path text not null unique,
   file_name text not null,
@@ -210,6 +210,19 @@ alter table public.report_photos alter column file_size set not null;
 alter table public.report_photos alter column uploaded_by set default auth.uid();
 alter table public.report_photos alter column created_at set default now();
 alter table public.report_photos alter column created_at set not null;
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.report_photos'::regclass
+      and confrelid = 'public.daily_reports'::regclass
+      and contype = 'f'
+  ) then
+    alter table public.report_photos
+      add constraint report_photos_report_id_fkey
+      foreign key (report_id) references public.daily_reports(id) on delete restrict;
+  end if;
+end $$;
 create unique index if not exists report_photos_storage_path_idx on public.report_photos(storage_path);
 create index if not exists report_photos_company_report_idx on public.report_photos(company_id, report_id, created_at);
 
