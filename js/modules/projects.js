@@ -279,7 +279,16 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
     if (projectType !== previousType && !window.confirm("Changing the job type will replace the current phases and tasks with the new job plan. Existing phase progress will be reset. Continue?")) return;
     submitButton.disabled = true;
     submitButton.textContent = "Saving...";
-    const { data: savedProject, error } = await supabase.from("projects").update({ name, address, project_type: projectType, latitude, longitude, geofence_radius_m: radius }).eq("id", project.id).select("id,address,latitude,longitude,geofence_radius_m").single();
+    const { data: savedProjectResult, error } = await supabase.rpc("update_project_settings", {
+      p_project_id: project.id,
+      p_name: name,
+      p_address: address,
+      p_project_type: projectType,
+      p_latitude: latitude,
+      p_longitude: longitude,
+      p_geofence_radius_m: radius,
+    });
+    const savedProject = Array.isArray(savedProjectResult) ? savedProjectResult[0] : savedProjectResult;
     if (error) {
       submitButton.disabled = false;
       submitButton.textContent = "Save changes";
