@@ -2,7 +2,7 @@ import { createProjectsModule } from "./projects.js";
 import { createReportsModule } from "./reports.js?v=20260820-gps-time-clock-1";
 import { createTeamModule } from "./team.js?v=20260820-phone-login-2";
 import { createTasksModule } from "./tasks.js?v=20260820-gps-time-clock-1";
-import { createAlertsModule, createFilesModule, createInspectionsModule, createLaborModule, createMaterialsModule, createScheduleModule, createSubcontractorsModule } from "./operations.js?v=20260820-phone-login-2";
+import { createAlertsModule, createFilesModule, createInspectionsModule, createLaborModule, createMaterialsModule, createScheduleModule, createSubcontractorsModule } from "./operations.js?v=20260826-manager-labor-1";
 
 const ROLE_NAMES = {
   owner_admin: "Owner / Admin",
@@ -59,6 +59,7 @@ export async function showDashboard({ supabase, session }) {
   document.querySelector("#roleLabel").textContent = role;
   document.querySelector("#sidebarUserRole").textContent = role;
   const employeeOnly = membership?.role === "foreman_employee";
+  const canManage = ["owner_admin", "project_manager"].includes(membership?.role);
 
   if (!membership?.companies) {
     document.querySelector("#companyLabel").textContent = "Your account is not connected to a company workspace yet.";
@@ -131,24 +132,25 @@ export async function showDashboard({ supabase, session }) {
   modules.projects = createProjectsModule({
     supabase,
     companyId: membership.companies.id,
-    canManage: ["owner_admin", "project_manager"].includes(membership.role),
+    canManage,
     canDelete: membership.role === "owner_admin",
     onCountChange: (nextCount) => { document.querySelector("#projectCount").textContent = String(nextCount); },
     onNavigate: navigate,
   });
-  modules.reports = createReportsModule({ supabase, session, companyId: membership.companies.id, membership, canManage: ["owner_admin", "project_manager"].includes(membership.role) });
-  modules.tasks = createTasksModule({ supabase, companyId: membership.companies.id, canManage: ["owner_admin", "project_manager"].includes(membership.role) });
-  const operationsAccess = { supabase, companyId: membership.companies.id, canManage: ["owner_admin", "project_manager"].includes(membership.role) };
+  modules.reports = createReportsModule({ supabase, session, companyId: membership.companies.id, membership, canManage });
+  modules.tasks = createTasksModule({ supabase, companyId: membership.companies.id, canManage });
+  const operationsAccess = { supabase, companyId: membership.companies.id, canManage };
   modules.schedule = createScheduleModule(operationsAccess);
   modules.materials = createMaterialsModule(operationsAccess);
   modules.inspections = createInspectionsModule(operationsAccess);
-  modules.labor = createLaborModule({ ...operationsAccess, session });
+  modules.labor = canManage ? createLaborModule({ ...operationsAccess, session }) : { load() {} };
   modules.subcontractors = createSubcontractorsModule(operationsAccess);
   modules.files = createFilesModule(operationsAccess);
   modules.alerts = createAlertsModule(operationsAccess);
-  modules.team = createTeamModule({ supabase, session, companyId: membership.companies.id, canManage: ["owner_admin", "project_manager"].includes(membership.role), managerRole: membership.role });
+  modules.team = createTeamModule({ supabase, session, companyId: membership.companies.id, canManage, managerRole: membership.role });
   modules.dashboard = { load: loadOperationsMetrics };
   if (employeeOnly) {
+    document.querySelector("#laborView").innerHTML = '<header class="dashboard-header"><div><p class="eyebrow">Worker access paused</p><h1>Time entry</h1></div></header><section class="workspace-card"><h2>Your manager records work hours</h2><p>Worker check-in and check-out are currently managed by the office. No action is required here.</p></section>';
     document.querySelectorAll(".nav-item").forEach((item) => { item.hidden = item.getAttribute("href") !== "#labor"; });
     document.querySelectorAll(".nav-section-label").forEach((label) => { label.hidden = true; });
   } else {
