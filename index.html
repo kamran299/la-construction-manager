@@ -2,391 +2,46 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#172033">
-    <meta name="description" content="Secure access to L&A Construction Manager">
-    <title>Sign in | L&A Construction Manager</title>
-    <link rel="stylesheet" href="/css/base.css">
-    <link rel="stylesheet" href="/css/login.css">
-    <link rel="stylesheet" href="/css/dashboard.css?v=20260820-phone-login-2">
-    <script type="module" src="/js/app.js?v=20260820-phone-login-2"></script>
+    <meta name="description" content="L&A Custom Homes provides custom residential construction, remodeling, and field project coordination.">
+    <title>L&amp;A Custom Homes | Residential Construction</title>
+    <link rel="stylesheet" href="/css/public.css">
   </head>
   <body>
-    <main id="loginView" class="login-layout">
-      <section class="brand-panel" aria-labelledby="brand-title">
-        <div class="brand-mark" aria-hidden="true">L&amp;A</div>
-        <div>
-          <p class="eyebrow">L&amp;A Custom Homes</p>
-          <h1 id="brand-title">Construction management, built for the field.</h1>
-          <p class="brand-copy">L&amp;A Custom Homes coordinates custom residential construction, remodeling, crews, daily reports, materials, and inspections in one secure workspace.</p>
-          <p class="brand-copy public-login-links"><a href="/about.html">Company &amp; services</a> · <a href="/sms-consent.html">SMS consent</a></p>
+    <header class="public-header">
+      <nav class="public-nav public-shell" aria-label="Public navigation">
+        <a class="public-brand" href="/"><span class="public-brand-mark">L&amp;A</span><strong>L&amp;A Custom Homes<span>Residential construction &amp; remodeling</span></strong></a>
+        <div class="public-links"><a href="#services">Services</a><a href="/privacy.html">Privacy</a><a href="/terms.html">SMS Terms</a><a class="public-cta" href="/sms-consent.html">SMS consent</a></div>
+      </nav>
+    </header>
+    <main>
+      <section class="public-hero">
+        <div class="public-shell public-hero-content">
+          <p class="public-eyebrow">L&amp;A Custom Homes</p>
+          <h1>Custom construction, coordinated from office to field.</h1>
+          <p>We build and improve residential properties while coordinating project schedules, field crews, daily reports, materials, inspections, and jobsite activity through L&amp;A Construction Manager.</p>
         </div>
-        <p class="brand-footer">L&amp;A Construction Manager</p>
       </section>
-
-      <section class="form-panel" aria-labelledby="login-title">
-        <div class="login-card">
-          <div class="mobile-brand" aria-hidden="true">L&amp;A</div>
-          <p class="eyebrow">Welcome back</p>
-          <h2 id="login-title">Sign in to your account</h2>
-          <p class="intro">Managers can use email. Workers can receive a one-time code by text.</p>
-
-          <div id="configMessage" class="message message-error" role="alert" hidden></div>
-
-          <div class="login-methods" role="tablist" aria-label="Sign-in method">
-            <button id="emailLoginTab" class="login-method is-active" type="button" role="tab" aria-selected="true" aria-controls="loginForm">Manager email</button>
-            <button id="phoneLoginTab" class="login-method" type="button" role="tab" aria-selected="false" aria-controls="phoneLoginForm">Worker phone</button>
+      <section id="services" class="public-section">
+        <div class="public-shell">
+          <p class="public-eyebrow">What we do</p>
+          <h2>Residential construction services</h2>
+          <p>L&amp;A Custom Homes manages construction work from planning through closeout, with clear field communication for employees and authorized contractors.</p>
+          <div class="service-grid">
+            <article class="service-card"><h3>Custom homes</h3><p>Project coordination for new residential construction, including phases, schedules, crews, and inspections.</p></article>
+            <article class="service-card"><h3>Remodeling</h3><p>Whole-home, kitchen, bathroom, and flooring renovation coordination with progress tracking.</p></article>
+            <article class="service-card"><h3>Field operations</h3><p>Daily reports, project tasks, materials, inspections, and time-clock activity for the construction team.</p></article>
           </div>
-
-          <form id="loginForm" novalidate>
-            <div class="field">
-              <label for="email">Email address</label>
-              <input id="email" name="email" type="email" autocomplete="email" inputmode="email" required>
-              <p id="emailError" class="field-error" aria-live="polite"></p>
-            </div>
-
-            <div class="field">
-              <div class="label-row">
-                <label for="password">Password</label>
-                <button id="togglePassword" class="text-button" type="button" aria-controls="password" aria-pressed="false">Show</button>
-              </div>
-              <input id="password" name="password" type="password" autocomplete="current-password" minlength="6" required>
-              <p id="passwordError" class="field-error" aria-live="polite"></p>
-            </div>
-
-            <div id="formMessage" class="message" role="status" aria-live="polite" hidden></div>
-            <button id="submitButton" class="primary-button" type="submit">
-              <span class="button-label">Sign in</span>
-              <span class="spinner" aria-hidden="true"></span>
-            </button>
-          </form>
-
-          <form id="phoneLoginForm" novalidate hidden>
-            <div class="field">
-              <label for="loginPhone">Mobile phone number</label>
-              <input id="loginPhone" name="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="(650) 555-0123" required>
-              <p id="phoneError" class="field-error" aria-live="polite"></p>
-            </div>
-            <div id="otpField" class="field" hidden>
-              <label for="loginCode">6-digit code</label>
-              <input id="loginCode" name="code" type="text" autocomplete="one-time-code" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="000000">
-              <p id="codeError" class="field-error" aria-live="polite"></p>
-            </div>
-            <div id="phoneFormMessage" class="message" role="status" aria-live="polite" hidden></div>
-            <button id="phoneSubmitButton" class="primary-button" type="submit">
-              <span class="button-label">Text me a sign-in code</span>
-              <span class="spinner" aria-hidden="true"></span>
-            </button>
-            <button id="changePhoneButton" class="text-button change-phone-button" type="button" hidden>Use a different phone number</button>
-          </form>
-
-          <p class="support-copy">Need access? Contact your company administrator.</p>
-          <p class="support-copy"><a href="/about.html">About L&amp;A Custom Homes</a> · <a href="/sms-consent.html">SMS consent</a></p>
-          <p class="support-copy"><a href="/privacy.html">Privacy Policy</a> · <a href="/terms.html">SMS Terms &amp; Conditions</a></p>
+        </div>
+      </section>
+      <section class="public-section" style="background:#fff">
+        <div class="public-shell consent-wrap">
+          <div><p class="public-eyebrow">Employee communications</p><h2>Optional transactional SMS program</h2><p class="consent-copy">Employees and contractors may voluntarily enroll to receive account invitations, one-time sign-in codes, and essential account or time-clock notices. SMS consent is optional and is not required for employment, account access, construction services, or any transaction. We do not send marketing messages.</p></div>
+          <div class="service-card"><h3>Want to receive work-account texts?</h3><p class="consent-copy">Review the full disclosures and submit the public <a href="/sms-consent.html">L&amp;A Construction Manager SMS consent form</a>. Anyone who does not want SMS can contact a company administrator for a non-SMS access method. You can also read our <a href="/privacy.html">Privacy Policy</a> and <a href="/terms.html">SMS Terms &amp; Conditions</a>.</p></div>
         </div>
       </section>
     </main>
-
-    <main id="dashboardView" class="dashboard-layout" hidden>
-      <aside class="sidebar">
-        <div class="sidebar-brand">
-          <div class="sidebar-mark" aria-hidden="true">L&amp;A</div>
-          <div><strong>Construction</strong><span>Manager</span></div>
-        </div>
-        <nav aria-label="Main navigation">
-          <span class="nav-section-label">Overview</span>
-          <a class="nav-item is-active" href="#dashboard" aria-current="page">
-            <span aria-hidden="true">⌂</span> Dashboard
-          </a>
-          <a id="projectsNav" class="nav-item" href="#projects">
-            <span aria-hidden="true">▦</span> Projects
-          </a>
-          <a id="reportsNav" class="nav-item" href="#reports">
-            <span aria-hidden="true">≡</span> Reports
-          </a>
-          <span class="nav-section-label">Operations</span>
-          <a id="tasksNav" class="nav-item" href="#tasks">
-            <span aria-hidden="true">✓</span> Tasks
-          </a>
-          <a class="nav-item" href="#schedule"><span aria-hidden="true">□</span> Schedule</a>
-          <a class="nav-item" href="#materials"><span aria-hidden="true">◇</span> Materials</a>
-          <a class="nav-item" href="#inspections"><span aria-hidden="true">⌕</span> Inspections</a>
-          <a id="timeClockNav" class="nav-item" href="#labor"><span aria-hidden="true">◷</span> Time Clock</a>
-          <span class="nav-section-label">Company</span>
-          <a class="nav-item" href="#subcontractors"><span aria-hidden="true">♢</span> Subcontractors</a>
-          <a class="nav-item" href="#files"><span aria-hidden="true">▤</span> Files &amp; Photos</a>
-          <a class="nav-item" href="#alerts"><span aria-hidden="true">!</span> Alerts <b id="alertCount" class="nav-count">0</b></a>
-          <a id="teamNav" class="nav-item" href="#team">
-            <span aria-hidden="true">♙</span> Users
-          </a>
-        </nav>
-        <div class="sidebar-account">
-          <span id="userInitial" class="avatar" aria-hidden="true">U</span>
-          <div><strong id="sidebarUserName">User</strong><span id="sidebarUserRole">Member</span></div>
-        </div>
-      </aside>
-
-      <section class="dashboard-content" aria-labelledby="dashboardTitle">
-        <header class="dashboard-header">
-          <div>
-            <p class="eyebrow">L&amp;A Construction Manager</p>
-            <h1 id="dashboardTitle">Dashboard</h1>
-          </div>
-          <button id="signOutButton" class="secondary-button" type="button">Sign out</button>
-        </header>
-
-        <div id="dashboardMessage" class="message message-error" role="alert" hidden></div>
-
-        <section class="welcome-card">
-          <div>
-            <p id="todayLabel" class="welcome-date"></p>
-            <h2>Welcome back, <span id="welcomeName">there</span>.</h2>
-            <p id="companyLabel">Your construction workspace is ready.</p>
-          </div>
-          <span class="status-pill"><i aria-hidden="true"></i> Cloud connected</span>
-        </section>
-
-        <section class="metric-grid" aria-label="Workspace overview">
-          <article class="metric-card">
-            <span class="metric-label">Projects</span>
-            <strong id="projectCount">—</strong>
-            <span class="metric-note">Available to your account</span>
-          </article>
-          <article class="metric-card">
-            <span class="metric-label">Account role</span>
-            <strong id="roleLabel" class="role-value">—</strong>
-            <span class="metric-note">Workspace permissions</span>
-          </article>
-          <article class="metric-card">
-            <span class="metric-label">System status</span>
-            <strong class="status-value">Online</strong>
-            <span class="metric-note">Supabase connected</span>
-          </article>
-          <article class="metric-card"><span class="metric-label">Open tasks</span><strong id="dashboardOpenTasks">—</strong><span class="metric-note">Independent Task Manager</span></article>
-          <article class="metric-card"><span class="metric-label">Materials pending</span><strong id="dashboardMaterials">—</strong><span class="metric-note">Needed or ordered</span></article>
-          <article class="metric-card"><span class="metric-label">Upcoming inspections</span><strong id="dashboardInspections">—</strong><span class="metric-note">Scheduled from today</span></article>
-        </section>
-
-        <section class="project-health-section">
-          <header class="section-heading"><div><p class="eyebrow">Live project overview</p><h2>Project status</h2></div><small>Tasks, purchasing and inspections</small></header>
-          <div id="projectHealthGrid" class="project-health-grid"></div>
-        </section>
-      </section>
-
-      <section id="projectsView" class="dashboard-content" aria-labelledby="projectsTitle" hidden>
-        <header class="dashboard-header">
-          <div><p class="eyebrow">Project management</p><h1 id="projectsTitle">Projects</h1></div>
-          <button id="backToDashboard" class="secondary-button" type="button">Dashboard</button>
-        </header>
-        <div id="projectsMessage" class="message message-error" role="alert" hidden></div>
-        <div class="projects-grid">
-          <section class="project-form-card">
-            <h2>Create project</h2>
-            <p>Choose the job type and the correct phase plan will be created automatically.</p>
-            <form id="projectForm">
-              <label for="projectName">Project name</label>
-              <input id="projectName" name="name" required>
-              <label for="projectType">Job type</label>
-              <select id="projectType" name="projectType" required>
-                <option value="new-construction">New construction</option>
-                <option value="whole-home-remodel">Whole-home remodel</option>
-                <option value="kitchen-remodel">Kitchen remodel</option>
-                <option value="bathroom-remodel">Bathroom remodel</option>
-                <option value="flooring-remodel">Flooring remodel</option>
-                <option value="kitchen-bath-flooring">Kitchen, bathroom &amp; flooring remodel</option>
-              </select>
-              <label for="projectAddress">Address</label>
-              <input id="projectAddress" name="address" autocomplete="street-address" placeholder="Start typing an address">
-              <button id="createProjectButton" class="primary-button" type="submit">Create project</button>
-            </form>
-          </section>
-          <section>
-            <div id="projectsList" class="projects-list"></div>
-          </section>
-        </div>
-      </section>
-
-      <section id="reportsView" class="dashboard-content" aria-labelledby="reportsTitle" hidden>
-        <header class="dashboard-header"><div><p class="eyebrow">Daily field reports</p><h1 id="reportsTitle">Reports</h1></div></header>
-        <div id="reportsMessage" class="message" role="status" hidden></div>
-        <div class="reports-layout">
-          <section class="workspace-card report-form-card">
-            <h2>New daily report</h2>
-            <p>Speak in Persian or English. Voice reports are written and saved in English automatically.</p>
-            <form id="reportForm">
-              <label for="reportDate">Work date</label><input id="reportDate" type="date" required>
-              <label for="reportProject">Project</label><select id="reportProject"><option value="">General / no project</option></select>
-              <label for="reportText">Report details</label><textarea id="reportText" dir="auto" rows="8" placeholder="What work was completed today? Include delays, safety issues, and next steps." required></textarea>
-              <div class="voice-report-controls">
-                <button id="recordReportButton" class="voice-report-button" type="button"><span aria-hidden="true">🎙</span> Start voice report</button>
-                <p id="recordingStatus" class="recording-status" role="status">Speak in Persian or English. The English report will appear above.</p>
-              </div>
-              <label for="reportPhotos">Job photos (optional)</label>
-              <label class="report-photo-picker" for="reportPhotos">
-                <input id="reportPhotos" type="file" accept="image/*" multiple>
-                <span aria-hidden="true">＋</span>
-                <strong>Add photos</strong>
-                <small id="reportPhotoHelp">Choose several jobsite photos. Up to 20 MB each.</small>
-              </label>
-              <div id="reportPhotoPreview" class="report-photo-preview" aria-live="polite"></div>
-              <button id="submitReportButton" class="primary-button" type="submit">Save report</button>
-            </form>
-          </section>
-          <section class="reports-column">
-            <div class="report-toolbar workspace-card">
-              <div><label for="reportsDateFilter">Reports for</label><input id="reportsDateFilter" type="date"></div>
-              <button id="summarizeReportsButton" class="secondary-button" type="button">Generate / refresh 5 PM summary</button>
-              <div class="report-pdf-actions" aria-label="PDF exports">
-                <button id="employeeReportsPdfButton" class="secondary-button" type="button">PDF by employee</button>
-                <button id="projectReportsPdfButton" class="secondary-button" type="button">PDF by project</button>
-                <button id="summaryPdfButton" class="secondary-button" type="button">Print refreshed AI summary PDF</button>
-              </div>
-            </div>
-            <article id="dailySummary" class="workspace-card daily-summary" hidden></article>
-            <div id="reportsList" class="reports-list"></div>
-          </section>
-        </div>
-      </section>
-
-      <section id="tasksView" class="dashboard-content" aria-labelledby="tasksTitle" hidden>
-        <header class="dashboard-header"><div><p class="eyebrow">From all daily reports</p><h1 id="tasksTitle">Tasks</h1></div><button id="tasksPdfButton" class="secondary-button" type="button">Download tasks PDF</button></header>
-        <div id="tasksMessage" class="message message-error" role="alert" hidden></div>
-        <section id="manualTaskCard" class="workspace-card manual-task-card">
-          <header><div><p class="eyebrow">Task Manager</p><h2>Add task manually</h2></div></header>
-          <form id="manualTaskForm">
-            <label>Project<select id="manualTaskProject"></select></label>
-            <label class="manual-task-details">Task<input id="manualTaskDetails" required placeholder="What needs to be done?"></label>
-            <label>Type<select id="manualTaskType"><option value="work">Work task</option><option value="material">Material to order</option></select></label>
-            <label>Assigned to<select id="manualTaskAssignee"><option value="">Unassigned</option></select></label>
-            <label>Due date<input id="manualTaskDueDate" type="date"></label>
-            <label>Status<select id="manualTaskStatus"><option value="open">Open</option><option value="in_progress">In progress</option><option value="completed">Completed</option></select></label>
-            <button id="addManualTaskButton" class="primary-button" type="submit">Add task</button>
-          </form>
-        </section>
-        <section class="task-metric-grid" aria-label="Task overview">
-          <article><span>Open work</span><strong id="openTaskCount">0</strong></article>
-          <article><span>Materials to order</span><strong id="materialTaskCount">0</strong></article>
-          <article><span>Completed carryovers</span><strong id="completedTaskCount">0</strong></article>
-        </section>
-        <div class="ai-tasks-layout">
-          <section class="workspace-card ai-task-section"><header><p class="eyebrow">Action list</p><h2>Work to do</h2></header><div id="openTasksList" class="ai-task-list"></div></section>
-          <section class="workspace-card ai-task-section materials-section"><header><p class="eyebrow">Purchasing</p><h2>Materials to order</h2></header><div id="materialTasksList" class="ai-task-list"></div></section>
-        </div>
-        <details class="workspace-card completed-task-section"><summary>Completed tasks from later reports</summary><div id="completedTasksList" class="ai-task-list"></div></details>
-      </section>
-
-      <section id="scheduleView" class="dashboard-content" aria-labelledby="scheduleTitle" hidden>
-        <header class="dashboard-header"><div><p class="eyebrow">Company calendar</p><h1 id="scheduleTitle">Schedule</h1></div></header>
-        <div id="scheduleMessage" class="message" role="status" hidden></div>
-        <div class="operations-layout">
-          <section id="scheduleFormCard" class="workspace-card operations-form-card"><h2>Add calendar item</h2><form id="scheduleForm">
-            <label>Project<select id="scheduleProject"></select></label><label class="wide-field">Title<input id="scheduleTitleInput" required placeholder="What is scheduled?"></label>
-            <label>Type<select id="scheduleType"><option value="work">Work</option><option value="inspection">Inspection</option><option value="delivery">Delivery</option><option value="meeting">Meeting</option><option value="other">Other</option></select></label>
-            <label>Date<input id="scheduleDate" type="date" required></label><label>Time<input id="scheduleTime" type="time"></label><label>Assigned to<select id="scheduleAssignee"></select></label>
-            <label class="wide-field">Notes<input id="scheduleNotes"></label><button class="primary-button" type="submit">Add to calendar</button>
-          </form></section>
-          <section class="workspace-card"><h2>Work, inspections &amp; deliveries</h2><div id="scheduleList" class="operations-list"></div></section>
-        </div>
-      </section>
-
-      <section id="materialsView" class="dashboard-content" aria-labelledby="materialsTitle" hidden>
-        <header class="dashboard-header"><div><p class="eyebrow">Purchasing control</p><h1 id="materialsTitle">Materials</h1></div></header>
-        <div id="materialsMessage" class="message" role="status" hidden></div>
-        <div class="operations-layout">
-          <section id="materialFormCard" class="workspace-card operations-form-card"><h2>Add material</h2><form id="materialForm">
-            <label>Project<select id="materialProject"></select></label><label class="wide-field">Material<input id="materialName" required placeholder="Material name"></label><label>Quantity<input id="materialQuantity"></label>
-            <label>Vendor<input id="materialVendor"></label><label>Needed by<input id="materialNeededBy" type="date"></label><label>Status<select id="materialStatus"><option value="needed">Needed</option><option value="ordered">Ordered</option><option value="delivered">Delivered</option></select></label>
-            <label class="wide-field">Notes<input id="materialNotes"></label><button class="primary-button" type="submit">Add material</button>
-          </form></section>
-          <section><div id="materialsList" class="management-grid"></div></section>
-        </div>
-      </section>
-
-      <section id="inspectionsView" class="dashboard-content" aria-labelledby="inspectionsTitle" hidden>
-        <header class="dashboard-header"><div><p class="eyebrow">Inspection calendar</p><h1 id="inspectionsTitle">Inspections</h1></div><label class="month-filter">Month<input id="inspectionMonth" type="month"></label></header>
-        <div id="inspectionsMessage" class="message" role="status" hidden></div>
-        <div class="operations-layout">
-          <section id="inspectionFormCard" class="workspace-card operations-form-card"><h2>Schedule inspection</h2><form id="inspectionForm">
-            <label>Project<select id="inspectionProject"></select></label><label class="wide-field">Inspection type<input id="inspectionType" required placeholder="Foundation, framing, rough plumbing..."></label><label>Date<input id="inspectionDate" type="date" required></label>
-            <label>Time<input id="inspectionTime" type="time"></label><label>Inspector<input id="inspectionInspector"></label><label class="wide-field">Notes<input id="inspectionNotes"></label><button class="primary-button" type="submit">Schedule inspection</button>
-          </form></section>
-          <section class="workspace-card"><h2>Monthly inspection calendar</h2><div id="inspectionsList" class="inspection-list"></div></section>
-        </div>
-      </section>
-
-      <section id="laborView" class="dashboard-content" aria-labelledby="laborTitle" hidden>
-        <header class="dashboard-header"><div><p class="eyebrow">Employee attendance &amp; hours</p><h1 id="laborTitle">Time Clock</h1></div><label class="month-filter">Work date<input id="laborDateFilter" type="date"></label></header>
-        <div id="laborMessage" class="message" role="status" hidden></div>
-        <section class="workspace-card time-clock-card">
-          <header class="section-heading"><div><p class="eyebrow">GPS time clock</p><h2>Check in &amp; check out</h2></div><strong id="timeClockStatus" class="clock-status">Not checked in</strong></header>
-          <p class="time-clock-privacy">Your location is recorded only when you press a button. The app does not track you between check-in and check-out.</p>
-          <div class="time-clock-controls">
-            <div class="clock-auto-project"><strong>Automatic project matching</strong><span id="timeClockDetectedProject">GPS will match you to the project area.</span></div>
-            <button id="timeClockAction" class="primary-button" type="button">Check in with GPS</button>
-          </div>
-          <p id="timeClockLocationStatus" class="clock-location-status" role="status">Your browser will ask for location permission when you check in.</p>
-          <div id="timeClockList" class="time-clock-list"></div>
-        </section>
-        <div class="operations-layout">
-          <section class="workspace-card operations-form-card"><h2>Add labor</h2><form id="laborForm">
-            <label>Employee<select id="laborEmployee"></select></label><label>Project<select id="laborProject"></select></label><label>Date<input id="laborDate" type="date" required></label><label>Hours<input id="laborHours" type="number" min="0.25" max="24" step="0.25" required></label>
-            <label>Trade / work<input id="laborTrade"></label><label class="wide-field">Notes<input id="laborNotes"></label><button class="primary-button" type="submit">Save labor</button>
-          </form></section>
-          <section class="workspace-card"><header class="section-heading"><h2>Daily labor</h2><strong id="laborTotal">0 hours</strong></header><div id="laborList" class="operations-list"></div></section>
-        </div>
-      </section>
-
-      <section id="subcontractorsView" class="dashboard-content" aria-labelledby="subcontractorsTitle" hidden>
-        <header class="dashboard-header"><div><p class="eyebrow">Trade partners</p><h1 id="subcontractorsTitle">Subcontractors</h1></div></header>
-        <div id="subcontractorsMessage" class="message" role="status" hidden></div>
-        <div class="operations-layout">
-          <section id="subcontractorFormCard" class="workspace-card operations-form-card"><h2>Add subcontractor</h2><form id="subcontractorForm">
-            <label class="wide-field">Company<input id="subcontractorCompany" required></label><label>Contact<input id="subcontractorContact"></label><label>Trade<input id="subcontractorTrade"></label><label>Phone<input id="subcontractorPhone" type="tel"></label>
-            <label>Email<input id="subcontractorEmail" type="email"></label><label>Insurance expiration<input id="subcontractorInsurance" type="date"></label><label class="wide-field">Notes<input id="subcontractorNotes"></label><button class="primary-button" type="submit">Add subcontractor</button>
-          </form></section>
-          <section><div id="subcontractorsList" class="management-grid"></div></section>
-        </div>
-      </section>
-
-      <section id="filesView" class="dashboard-content" aria-labelledby="filesTitle" hidden>
-        <header class="dashboard-header"><div><p class="eyebrow">Project library</p><h1 id="filesTitle">Files, Plans &amp; Photos</h1></div></header>
-        <div id="filesMessage" class="message" role="status" hidden></div>
-        <section id="libraryUploadCard" class="workspace-card operations-form-card"><h2>Upload files</h2><form id="libraryUploadForm">
-          <label>Project<select id="libraryProject" required></select></label><label>Category<select id="libraryCategory"><option value="photos">Photos</option><option value="plans">Plans</option><option value="documents">Documents</option></select></label><label>Date<input id="libraryDate" type="date"></label><label>Location / area<input id="libraryLocation" placeholder="Kitchen, front yard..."></label><label class="wide-field">Description<input id="libraryDescription" placeholder="What does this file or photo show?"></label><label class="wide-field">Choose files<input id="libraryFiles" type="file" multiple required></label><button class="primary-button" type="submit">Upload</button>
-        </form></section><div id="filesLibraryList" class="management-grid files-library"></div>
-      </section>
-
-      <section id="alertsView" class="dashboard-content" aria-labelledby="alertsTitle" hidden>
-        <header class="dashboard-header"><div><p class="eyebrow">Automatic notifications</p><h1 id="alertsTitle">Alerts</h1></div></header>
-        <div id="alertsMessage" class="message" role="status" hidden></div><section class="workspace-card"><div id="alertsList" class="alerts-list"></div></section>
-      </section>
-
-      <section id="teamView" class="dashboard-content" aria-labelledby="teamTitle" hidden>
-        <header class="dashboard-header"><div><p class="eyebrow">Company access</p><h1 id="teamTitle">Users</h1></div></header>
-        <div id="teamMessage" class="message" role="status" hidden></div>
-        <div class="team-layout">
-          <div class="team-form-column"><section id="inviteCard" class="workspace-card">
-            <h2>Add user</h2><p>An invitation email will be sent to the new user.</p>
-            <form id="inviteForm">
-              <label for="inviteName">Full name</label><input id="inviteName" required>
-              <label for="inviteEmail">Work email</label><input id="inviteEmail" type="email" required>
-              <label for="inviteRole">Role</label><select id="inviteRole"><option value="project_manager">Project Manager</option><option value="foreman_employee">Foreman / Employee</option><option value="viewer">Viewer</option></select>
-              <button id="inviteButton" class="primary-button" type="submit">Send invitation</button>
-            </form>
-          </section>
-          <section id="workerCard" class="workspace-card">
-            <h2>Add worker</h2><p>The worker will receive a text invitation. Their phone number becomes their secure sign-in.</p>
-            <form id="workerForm">
-              <label for="workerName">Full name</label><input id="workerName" required>
-              <label for="workerPhone">Phone</label><input id="workerPhone" type="tel" required>
-              <label for="workerEmail">Email (optional)</label><input id="workerEmail" type="email">
-              <label for="workerTrade">Trade / work</label><input id="workerTrade" placeholder="Carpenter, laborer, painter...">
-              <button id="workerButton" class="primary-button" type="submit">Add worker &amp; send text</button>
-            </form>
-          </section></div>
-          <section><div id="teamList" class="team-list"></div></section>
-        </div>
-      </section>
-    </main>
+    <footer class="public-footer"><div class="public-shell"><p>© 2026 L&amp;A Custom Homes</p><p><a href="/login.html">Employee sign in</a> · SMS support: <a href="tel:+16503744572">(650) 374-4572</a></p></div></footer>
   </body>
 </html>

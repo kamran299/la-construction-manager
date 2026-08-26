@@ -20,7 +20,7 @@ async function sendInvitation({ phone, siteUrl }) {
 
   const parameters = new URLSearchParams({
     To: phone,
-    Body: `L&A Custom Homes: You were added to the employee time clock. Open ${siteUrl}, choose Worker phone, and request your sign-in code. Reply STOP to opt out.`,
+    Body: `L&A Custom Homes: You were added to the employee time clock. Open ${siteUrl}/login.html, choose Worker phone, and request your sign-in code. Reply STOP to opt out or HELP for help.`,
   });
   if (messagingServiceSid) parameters.set("MessagingServiceSid", messagingServiceSid);
   else parameters.set("From", fromNumber);
