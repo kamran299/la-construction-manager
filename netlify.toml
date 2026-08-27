@@ -9,3 +9,8 @@
   for = "/*"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[redirects]]
+  from = "/login"
+  to = "/login.html"
+  status = 301

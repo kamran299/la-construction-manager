@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/login.css">
     <link rel="stylesheet" href="/css/dashboard.css?v=20260826-manager-labor-1">
-    <script type="module" src="/js/app.js?v=20260826-manager-labor-1"></script>
+    <script type="module" src="/js/app.js?v=20260826-passwordless-login-1"></script>
   </head>
   <body>
     <main id="loginView" class="login-layout">
@@ -29,13 +29,13 @@
           <div class="mobile-brand" aria-hidden="true">L&amp;A</div>
           <p class="eyebrow">Welcome back</p>
           <h2 id="login-title">Sign in to your account</h2>
-          <p class="intro">Managers can use email. Workers can receive a one-time code by text.</p>
+          <p class="intro">No password needed. Receive a secure sign-in link by email or a one-time code by text.</p>
 
           <div id="configMessage" class="message message-error" role="alert" hidden></div>
 
           <div class="login-methods" role="tablist" aria-label="Sign-in method">
-            <button id="emailLoginTab" class="login-method is-active" type="button" role="tab" aria-selected="true" aria-controls="loginForm">Manager email</button>
-            <button id="phoneLoginTab" class="login-method" type="button" role="tab" aria-selected="false" aria-controls="phoneLoginForm">Worker phone</button>
+            <button id="emailLoginTab" class="login-method is-active" type="button" role="tab" aria-selected="true" aria-controls="loginForm">Email link</button>
+            <button id="phoneLoginTab" class="login-method" type="button" role="tab" aria-selected="false" aria-controls="phoneLoginForm">Text code</button>
           </div>
 
           <form id="loginForm" novalidate>
@@ -45,20 +45,12 @@
               <p id="emailError" class="field-error" aria-live="polite"></p>
             </div>
 
-            <div class="field">
-              <div class="label-row">
-                <label for="password">Password</label>
-                <button id="togglePassword" class="text-button" type="button" aria-controls="password" aria-pressed="false">Show</button>
-              </div>
-              <input id="password" name="password" type="password" autocomplete="current-password" minlength="6" required>
-              <p id="passwordError" class="field-error" aria-live="polite"></p>
-            </div>
-
             <div id="formMessage" class="message" role="status" aria-live="polite" hidden></div>
             <button id="submitButton" class="primary-button" type="submit">
-              <span class="button-label">Sign in</span>
+              <span class="button-label">Email me a sign-in link</span>
               <span class="spinner" aria-hidden="true"></span>
             </button>
+            <p class="passwordless-note">The email link is secure, can be used once, and replaces your password.</p>
           </form>
 
           <form id="phoneLoginForm" novalidate hidden>
@@ -80,7 +72,7 @@
             <button id="changePhoneButton" class="text-button change-phone-button" type="button" hidden>Use a different phone number</button>
           </form>
 
-          <p class="support-copy">Need access? Contact your company administrator.</p>
+          <p class="support-copy">Only users already added by the company can sign in. Need access? Contact your administrator.</p>
           <p class="support-copy"><a href="/">About L&amp;A Custom Homes</a> · <a href="/sms-consent.html">SMS consent</a></p>
           <p class="support-copy"><a href="/privacy.html">Privacy Policy</a> · <a href="/terms.html">SMS Terms &amp; Conditions</a></p>
         </div>

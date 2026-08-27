@@ -1,4 +1,4 @@
-import { createLoginModule } from "./modules/login.js";
+import { createLoginModule } from "./modules/login.js?v=20260826-passwordless-login-1";
 import { showDashboard } from "./modules/dashboard.js?v=20260826-manager-labor-1";
 import { getSupabaseClient } from "./services/supabase.js";
 
