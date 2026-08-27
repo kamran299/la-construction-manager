@@ -170,11 +170,32 @@ export function createLoginModule({ supabase, onAuthenticated }) {
       code.focus();
       return;
     }
+
+    const { data: existingMembership, error: membershipError } = await supabase
+      .from("company_members")
+      .select("id")
+      .eq("user_id", data.session.user.id)
+      .eq("is_active", true)
+      .limit(1)
+      .maybeSingle();
+    if (!membershipError && existingMembership) {
+      showPhoneMessage("Signed in successfully. Loading your workspace…");
+      onAuthenticated(data.session);
+      return;
+    }
+
+    const { data: memberClaimedCount, error: memberClaimError } = await supabase.rpc("claim_member_phone_access");
+    if (!memberClaimError && Number(memberClaimedCount || 0) > 0) {
+      showPhoneMessage("Signed in successfully. Loading your workspace…");
+      onAuthenticated(data.session);
+      return;
+    }
+
     const { data: claimedCount, error: claimError } = await supabase.rpc("claim_worker_membership");
     if (claimError || Number(claimedCount || 0) < 1) {
       await supabase.auth.signOut();
       setPhoneLoading(false);
-      showPhoneMessage("This phone number has not been added by your company administrator.", true);
+      showPhoneMessage("This phone number is not connected to an active user or worker. Ask your company administrator to add it.", true);
       return;
     }
     showPhoneMessage("Signed in successfully. Loading your workspace…");

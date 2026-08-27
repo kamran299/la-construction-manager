@@ -40,24 +40,33 @@ export default async (request) => {
     const targets = targetResponse.ok ? await targetResponse.json() : [];
     const target = targets[0];
     if (!target) return json(404, { error: "User was not found" });
-    if (target.user_id === caller.id) return json(400, { error: "You cannot remove or change your own account here" });
-    if (target.role === "owner_admin") return json(403, { error: "The owner account cannot be changed or removed" });
+    const isSelf = target.user_id === caller.id;
+    if (isSelf && (action !== "update" || body.selfPhoneOnly !== true)) return json(400, { error: "You can only update the phone number on your own account here" });
+    if (!isSelf && target.role === "owner_admin") return json(403, { error: "The owner account cannot be changed or removed" });
     if (callerRole === "project_manager" && target.role === "project_manager") return json(403, { error: "Only the owner can manage another project manager" });
 
     let changes;
     if (action === "remove") {
       changes = { is_active: false };
     } else {
-      const fullName = String(body.fullName || "").trim();
-      const role = String(body.role || "");
+      const fullName = isSelf ? target.full_name : String(body.fullName || "").trim();
+      const role = isSelf ? target.role : String(body.role || "");
+      const rawPhone = String(body.phone || "").trim();
+      const phone = rawPhone ? normalizePhone(rawPhone) : "";
       const allowedRoles = callerRole === "owner_admin" ? ["project_manager", "foreman_employee", "viewer"] : ["foreman_employee", "viewer"];
-      if (!fullName || !allowedRoles.includes(role)) return json(400, { error: "Enter a valid name and role" });
-      changes = { full_name: fullName, role };
+      if (!fullName || (!isSelf && !allowedRoles.includes(role)) || (rawPhone && !phone)) return json(400, { error: "Enter a valid name, phone number, and role" });
+      changes = { full_name: fullName, phone: phone || null, role };
     }
     const updateResponse = await fetch(`${url}/rest/v1/company_members?id=eq.${encodeURIComponent(targetId)}&company_id=eq.${encodeURIComponent(companyId)}`, {
       method: "PATCH", headers: { ...adminHeaders, Prefer: "return=minimal" }, body: JSON.stringify(changes),
     });
     if (!updateResponse.ok) return json(400, { error: "The user could not be updated" });
+    const aliasChanges = action === "remove" || normalizePhone(target.phone) !== normalizePhone(changes.phone)
+      ? { is_active: false }
+      : { full_name: changes.full_name, phone: changes.phone, role: changes.role, is_active: true };
+    await fetch(`${url}/rest/v1/company_members?company_id=eq.${encodeURIComponent(companyId)}&login_alias_of=eq.${encodeURIComponent(target.user_id)}`, {
+      method: "PATCH", headers: { ...adminHeaders, Prefer: "return=minimal" }, body: JSON.stringify(aliasChanges),
+    });
     return json(200, { ok: true });
   }
 

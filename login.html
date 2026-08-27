@@ -8,8 +8,8 @@
     <title>Sign in | L&A Construction Manager</title>
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/login.css">
-    <link rel="stylesheet" href="/css/dashboard.css?v=20260826-manager-labor-1">
-    <script type="module" src="/js/app.js?v=20260826-passwordless-login-1"></script>
+    <link rel="stylesheet" href="/css/dashboard.css?v=20260826-member-phone-login-1">
+    <script type="module" src="/js/app.js?v=20260826-phone-member-fix-1"></script>
   </head>
   <body>
     <main id="loginView" class="login-layout">
@@ -353,6 +353,7 @@
             <form id="inviteForm">
               <label for="inviteName">Full name</label><input id="inviteName" required>
               <label for="inviteEmail">Work email</label><input id="inviteEmail" type="email" required>
+              <label for="invitePhone">Mobile phone (optional)</label><input id="invitePhone" type="tel" autocomplete="tel" placeholder="(650) 555-0123">
               <label for="inviteRole">Role</label><select id="inviteRole"><option value="project_manager">Project Manager</option><option value="foreman_employee">Foreman / Employee</option><option value="viewer">Viewer</option></select>
               <button id="inviteButton" class="primary-button" type="submit">Send invitation</button>
             </form>
