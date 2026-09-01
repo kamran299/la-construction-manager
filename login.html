@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/login.css">
     <link rel="stylesheet" href="/css/dashboard.css?v=20260826-member-phone-login-1">
-    <script type="module" src="/js/app.js?v=20260826-phone-member-fix-1"></script>
+    <script type="module" src="/js/app.js?v=20260831-task-resolution-1"></script>
   </head>
   <body>
     <main id="loginView" class="login-layout">
@@ -258,13 +258,13 @@
         <section class="task-metric-grid" aria-label="Task overview">
           <article><span>Open work</span><strong id="openTaskCount">0</strong></article>
           <article><span>Materials to order</span><strong id="materialTaskCount">0</strong></article>
-          <article><span>Completed carryovers</span><strong id="completedTaskCount">0</strong></article>
+          <article><span>Completed history (hidden)</span><strong id="completedTaskCount">0</strong></article>
         </section>
         <div class="ai-tasks-layout">
           <section class="workspace-card ai-task-section"><header><p class="eyebrow">Action list</p><h2>Work to do</h2></header><div id="openTasksList" class="ai-task-list"></div></section>
           <section class="workspace-card ai-task-section materials-section"><header><p class="eyebrow">Purchasing</p><h2>Materials to order</h2></header><div id="materialTasksList" class="ai-task-list"></div></section>
         </div>
-        <details class="workspace-card completed-task-section"><summary>Completed tasks from later reports</summary><div id="completedTasksList" class="ai-task-list"></div></details>
+        <details id="completedTaskHistory" class="workspace-card completed-task-section"><summary id="completedTaskHistorySummary">Completed history — tap to view</summary><div id="completedTasksList" class="ai-task-list"></div></details>
       </section>
 
       <section id="scheduleView" class="dashboard-content" aria-labelledby="scheduleTitle" hidden>

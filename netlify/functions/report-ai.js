@@ -2,7 +2,7 @@ function json(statusCode, body) {
   return new Response(JSON.stringify(body), { status: statusCode, headers: { "content-type": "application/json" } });
 }
 
-const REPORT_AI_VERSION = "2026-08-20-task-sync-v13";
+const REPORT_AI_VERSION = "2026-08-31-task-resolution-v14";
 
 const TEXT_MODEL_PRICING = [
   { pattern: /^gpt-4\.1-mini(?:-|$)/i, input: 0.40, cachedInput: 0.10, output: 1.60 },
@@ -424,7 +424,7 @@ Classification rules:
 - Inspections contains only an actual inspection, inspector visit, inspection result, correction notice, or explicitly requested or scheduled inspection. Do not turn a generic check, installation, removal, reinstallation, repair, or Monday work into an inspection. Use report_date as the time reference: an inspection booked for a later date belongs in inspections and tomorrow_plan, not completed_work. Persian wording equivalent to "we got/booked an inspection for [date]" means the inspection was scheduled for that date, not conducted.
 - Overdue work requires explicit evidence that work is late, missed, overdue, unfinished past its expected time, or carried over. A general blocker is not automatically overdue.
 - Risks contains only the actual risk, hazard, complaint, or concern. Describe it in natural management English. Never call enforcement, PPE use, a safety meeting, or another corrective action a "safety risk"; include a corrective action only after naming an explicit underlying hazard or noncompliance.
-- Prior open action items are the still-unresolved tasks reconstructed chronologically from all earlier daily summaries, not only the previous day. Use them only to identify tasks explicitly completed today. List those confirmations in resolved_prior_tasks using the exact carryover_id and an exact completion excerpt from today's report. The backend appends every unresolved carryover automatically, so do not repeat unresolved prior tasks in tomorrow_plan. Never treat silence as completion.
+- Prior open action items are the still-unresolved tasks reconstructed chronologically from all earlier daily summaries, not only the previous day. Use them only to identify tasks explicitly completed today. Match by project and the substantive work object or area; tolerate tense changes, word-order changes, shortened wording, and clear paraphrases. If today's completion clearly fulfills a prior task, return that prior task's exact carryover_id even when the sentences are not identical. List those confirmations in resolved_prior_tasks with an exact completion excerpt from today's report. The backend appends every unresolved carryover automatically, so do not repeat unresolved prior tasks in tomorrow_plan. Never treat silence or merely related work as completion.
 - New explicit next steps from today's reports go in tomorrow_plan with source "today" and source_date set to the submitted report date. Every item supplied in structured_next_actions is a required same-day next action and must be included unless today's report explicitly confirms that exact work was completed.
 Return only valid JSON with exactly this structure:
 {

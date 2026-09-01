@@ -487,6 +487,26 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     return [...merged.values()];
   }
 
+  async function persistResolvedTaskStatuses(resolvedTasks) {
+    const items = (Array.isArray(resolvedTasks) ? resolvedTasks : []).filter((item) => item?.carryover_id);
+    if (!items.length) return;
+    const completedAt = new Date().toISOString();
+    for (const item of items) {
+      const carryoverId = String(item.carryover_id);
+      let query = supabase.from("work_tasks").update({
+        status: "completed",
+        completion_evidence: String(item.evidence || "Completed in a later daily report"),
+        completed_at: completedAt,
+        updated_at: completedAt,
+      }).eq("company_id", companyId).in("status", ["open", "in_progress"]);
+      query = carryoverId.startsWith("task:")
+        ? query.eq("id", carryoverId.slice(5))
+        : query.eq("legacy_key", carryoverId);
+      const { error } = await query;
+      if (error) throw new Error("A completed task could not be synchronized with Task Manager.");
+    }
+  }
+
   async function loadProjects() {
     const { data } = await supabase.from("projects").select("id,name,address").eq("company_id", companyId).order("address");
     projects = data || [];
@@ -633,6 +653,8 @@ export function createReportsModule({ supabase, session, companyId, membership, 
       summaryStage = "Saving to Supabase";
       const { error } = await supabase.from("daily_report_summaries").upsert({ company_id: companyId, report_date: filterDate.value, english_summary: JSON.stringify(generatedSummary), generated_by: session.user.id, updated_at: new Date().toISOString() }, { onConflict: "company_id,report_date" });
       if (error) throw error;
+      summaryStage = "Synchronizing completed tasks";
+      await persistResolvedTaskStatuses(generatedSummary.resolved_prior_tasks);
       await loadReports();
       message.textContent = `5 PM summary created successfully.${formatAiUsage(generatedSummary.ai_usage) ? ` AI usage: ${formatAiUsage(generatedSummary.ai_usage)}.` : ""}`;
       message.classList.remove("message-error");

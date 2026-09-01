@@ -186,6 +186,8 @@ export function createTasksModule({ supabase, companyId, canManage }) {
   const workList = document.querySelector("#openTasksList");
   const materialList = document.querySelector("#materialTasksList");
   const completedList = document.querySelector("#completedTasksList");
+  const completedHistory = document.querySelector("#completedTaskHistory");
+  const completedHistorySummary = document.querySelector("#completedTaskHistorySummary");
   const pdfButton = document.querySelector("#tasksPdfButton");
   let tasks = [];
   let members = [];
@@ -249,7 +251,10 @@ export function createTasksModule({ supabase, companyId, canManage }) {
     document.querySelector("#completedTaskCount").textContent = String(completed.length);
     workList.innerHTML = sortTasks(open).map((task) => renderTask(task, canManage, members)).join("") || '<p class="tasks-empty">No open work tasks were found.</p>';
     materialList.innerHTML = sortTasks(materials).map((task) => renderTask(task, canManage, members)).join("") || '<p class="tasks-empty">No materials need to be ordered.</p>';
-    completedList.innerHTML = sortTasks(completed).map((task) => renderTask(task, canManage, members)).join("") || '<p class="tasks-empty">No completed tasks were found.</p>';
+    completedHistorySummary.textContent = `Completed history (${completed.length}) — tap to ${completedHistory.open ? "hide" : "view"}`;
+    completedList.innerHTML = completedHistory.open
+      ? (sortTasks(completed).map((task) => renderTask(task, canManage, members)).join("") || '<p class="tasks-empty">No completed tasks were found.</p>')
+      : "";
   }
 
   async function load() {
@@ -313,7 +318,7 @@ export function createTasksModule({ supabase, companyId, canManage }) {
       const isStatus = select.classList.contains("task-status-select");
       const field = isStatus ? "status" : "assigned_to";
       const update = isStatus
-        ? { status: select.value, completed_at: select.value === "completed" ? new Date().toISOString() : null }
+        ? { status: select.value, completed_at: select.value === "completed" ? new Date().toISOString() : null, updated_at: new Date().toISOString() }
         : { assigned_to: select.value || null, assigned_name: memberName(select.value) || null };
       const { error } = await supabase.from("work_tasks").update(update).eq("id", id).eq("company_id", companyId);
       if (error) throw error;
@@ -321,6 +326,8 @@ export function createTasksModule({ supabase, companyId, canManage }) {
       await load();
     } catch { showMessage("The task status could not be saved.", true); select.disabled = false; }
   });
+
+  completedHistory.addEventListener("toggle", render);
 
   pdfButton.addEventListener("click", () => {
     try {
