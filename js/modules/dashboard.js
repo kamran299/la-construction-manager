@@ -1,6 +1,6 @@
 import { createPaperworkModule } from "./paperwork.js?v=20260924-phone-5";
 import { createProjectsModule } from "./projects.js?v=20260924-phone-5";
-import { createReportsModule } from "./reports.js?v=20260831-task-resolution-1";
+import { createReportsModule } from "./reports.js?v=20260925-edit-2";
 import { createTeamModule } from "./team.js?v=20260826-member-phone-login-1";
 import { createTasksModule } from "./tasks.js?v=20260831-task-resolution-1";
 import { createAlertsModule, createFilesModule, createInspectionsModule, createLaborModule, createMaterialsModule, createScheduleModule, createSubcontractorsModule } from "./operations.js?v=20260826-manager-labor-1";
@@ -122,7 +122,7 @@ export async function showDashboard({ supabase, session }) {
   };
   const modules = {};
   function navigate(name) {
-    if (employeeOnly) name = "labor";
+    if (employeeOnly) name = "reports";
     if (name === "paperwork" && !canPaperwork) name = "dashboard";
     Object.entries(views).forEach(([key, view]) => { view.hidden = key !== name; });
     let activeNav;
@@ -158,11 +158,11 @@ export async function showDashboard({ supabase, session }) {
   if (canPaperwork) modules.paperwork = createPaperworkModule({ supabase, companyId: membership.companies.id });
   if (employeeOnly) {
     document.querySelector("#laborView").innerHTML = '<header class="dashboard-header"><div><p class="eyebrow">Worker access paused</p><h1>Time entry</h1></div></header><section class="workspace-card"><h2>Your manager records work hours</h2><p>Worker check-in and check-out are currently managed by the office. No action is required here.</p></section>';
-    document.querySelectorAll(".nav-item").forEach((item) => { item.hidden = item.getAttribute("href") !== "#labor"; });
+    document.querySelectorAll(".nav-item").forEach((item) => { item.hidden = item.getAttribute("href") !== "#reports"; });
     document.querySelectorAll(".nav-section-label").forEach((label) => { label.hidden = true; });
   } else {
     Promise.all([modules.tasks.load(), modules.inspections.load()]).then(() => Promise.all([loadOperationsMetrics(), modules.alerts.load()]));
   }
   document.querySelectorAll(".nav-item").forEach((item) => item.addEventListener("click", (event) => { event.preventDefault(); navigate(item.getAttribute("href").slice(1)); }));
-  navigate(employeeOnly ? "labor" : (location.hash.slice(1) in views ? location.hash.slice(1) : "dashboard"));
+  navigate(employeeOnly ? "reports" : (location.hash.slice(1) in views ? location.hash.slice(1) : "dashboard"));
 }
