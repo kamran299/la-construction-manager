@@ -28,9 +28,10 @@ export function createPaperworkModule({supabase,companyId}) {
   const root=document.querySelector('#paperworkView');
   let documents=[],projects=[],editing=null,requestId=crypto.randomUUID(),busy=false,dirty=false;
   root.innerHTML=`<header class="dashboard-header"><div><p class="eyebrow">Private workspace</p><h1>Paperwork</h1><p>Estimates, invoices and proposals on your L&A letterhead.</p></div></header>
+  <div class="pw-actions pw-create-types" aria-label="Create a document"><button type="button" data-new-kind="estimate">New estimate</button><button type="button" data-new-kind="invoice">New invoice</button><button type="button" data-new-kind="proposal">New proposal</button></div>
   <p id="pwMessage" role="status" aria-live="polite"></p>
   <div class="pw-grid"><section class="workspace-card"><h2 id="pwHeading">New document</h2>
-  <form id="pwForm"><label>Document type<select name="kind"><option value="estimate">Estimate</option><option value="invoice">Invoice</option><option value="proposal">Proposal</option></select></label>
+  <form id="pwForm"><p id="pwEditType" hidden></p><label id="pwTypeLabel">Document type<select name="kind"><option value="estimate">Estimate</option><option value="invoice">Invoice</option><option value="proposal">Proposal</option></select></label>
   <label>Project<select name="project_id"><option value="">Other / enter address</option></select></label>
   <label>Client name<input name="client_name" maxlength="300" required autocomplete="name"></label>
   <label>Client email<input name="client_email" type="email" maxlength="320" autocomplete="email"></label>
@@ -48,9 +49,9 @@ export function createPaperworkModule({supabase,companyId}) {
   const field=name=>form.elements.namedItem(name);
   function message(text,error=false){const el=root.querySelector('#pwMessage');el.textContent=text;el.className=error?'message message-error':'message';}
   function lock(value){busy=value;root.querySelectorAll('button').forEach(b=>b.disabled=value);form.querySelectorAll('input,textarea,select').forEach(el=>el.disabled=value);if(!value)field('kind').disabled=Boolean(editing);}
-  function reset(){editing=null;requestId=crypto.randomUUID();form.reset();field('kind').disabled=false;field('issue_date').value=localDate();root.querySelector('#pwHeading').textContent='New document';root.querySelector('#pwNumber').textContent='A unique document number is assigned when you save.';dirty=false;}
+  function reset(kind='estimate'){editing=null;requestId=crypto.randomUUID();form.reset();field('kind').value=kind;field('kind').disabled=false;root.querySelector('#pwTypeLabel').hidden=false;root.querySelector('#pwEditType').hidden=true;field('issue_date').value=localDate();root.querySelector('#pwHeading').textContent='New document';root.querySelector('#pwNumber').textContent='A unique document number is assigned when you save.';dirty=false;}
   function renderList(){const q=root.querySelector('#pwSearch').value.toLowerCase();const matches=documents.filter(d=>[d.document_number,d.client_name,d.project_address,d.title].join(' ').toLowerCase().includes(q));
-    list.innerHTML=matches.length?matches.map(d=>`<article class="pw-document"><strong>${escapeHtml(d.document_number)}</strong><span class="pw-status">${escapeHtml(d.status)}</span><p>${escapeHtml(d.client_name)}<br>${escapeHtml(d.project_address)}</p><p>${escapeHtml(d.title)} · ${escapeHtml(money(d.amount))}<br>${escapeHtml(d.issue_date)}</p><div class="pw-actions">${d.status==='draft'?`<button data-action="edit" data-id="${escapeHtml(d.id)}">Edit</button><button data-action="issue" data-id="${escapeHtml(d.id)}">Mark issued</button>`:''}<button data-action="print" data-id="${escapeHtml(d.id)}">Print / PDF</button>${d.status!=='void'?`<button data-action="void" data-id="${escapeHtml(d.id)}">Void</button>`:''}</div></article>`).join(''):'<p>No matching documents.</p>';
+    list.innerHTML=matches.length?matches.map(d=>`<article class="pw-document"><strong>${escapeHtml(d.document_number)}</strong><span class="pw-status">${escapeHtml(d.status)}</span><p>${escapeHtml(d.client_name)}<br>${escapeHtml(d.project_address)}</p><p>${escapeHtml(d.title)} · ${escapeHtml(money(d.amount))}<br>${escapeHtml(d.issue_date)}</p><div class="pw-actions">${d.status==='draft'?`<button data-action="edit" data-id="${escapeHtml(d.id)}">Edit</button><button data-action="issue" data-id="${escapeHtml(d.id)}">Mark issued</button>`:''}<a class="pw-print-link" href="/paperwork-print.html?id=${encodeURIComponent(d.id)}" target="_blank" rel="noopener">Print / PDF</a>${d.status!=='void'?`<button data-action="void" data-id="${escapeHtml(d.id)}">Void</button>`:''}</div></article>`).join(''):'<p>No matching documents.</p>';
   }
   async function fetchDocuments(){const {data,error}=await supabase.from('paperwork_documents').select('*').eq('company_id',companyId).order('created_at',{ascending:false});if(error)throw error;documents=data||[];renderList();}
   async function load(){if(busy)return;lock(true);try{
@@ -63,6 +64,7 @@ export function createPaperworkModule({supabase,companyId}) {
   field('project_id').addEventListener('change',()=>{const p=projects.find(p=>p.id===field('project_id').value);if(p){field('project_address').value=p.address||'';field('client_name').value=p.client_name||'';field('client_email').value=p.client_email||'';field('client_phone').value=p.client_phone||'';}else{for(const n of ['project_address','client_name','client_email','client_phone'])field(n).value='';}dirty=true;});
   root.querySelector('#pwSearch').oninput=renderList;
   root.querySelector('#pwRefresh').onclick=load;
+  root.querySelectorAll('[data-new-kind]').forEach(button=>{button.onclick=()=>{if(!dirty||confirm('Discard unsaved changes and start a new document?'))reset(button.dataset.newKind);};});
   root.querySelector('#pwNew').onclick=()=>{if(!dirty||confirm('Discard unsaved changes and start a new document?'))reset();};
   form.onsubmit=async event=>{event.preventDefault();if(busy||!form.reportValidity())return;
     let cents;try{cents=amountInCents(field('amount').value);}catch(e){message(e.message,true);return;}
@@ -71,14 +73,9 @@ export function createPaperworkModule({supabase,companyId}) {
       p_client_name:field('client_name').value.trim(),p_client_email:field('client_email').value.trim(),p_client_phone:field('client_phone').value.trim(),p_project_address:field('project_address').value.trim(),p_title:field('title').value.trim(),p_scope:field('scope').value.trim(),p_amount:(cents/100).toFixed(2),p_notes:field('notes').value,p_expected_version:editing?.version||0});
       if(error)throw error;const saved=Array.isArray(data)?data[0]:data;edit(saved);await fetchDocuments();message('Saved '+saved.document_number+'. Print the draft or mark it issued when ready.');
     }catch(error){message('Could not save: '+error.message,true);}finally{lock(false);}};
-  function edit(d){editing=d;requestId=d.id;for(const name of ['kind','project_id','client_name','client_email','client_phone','project_address','issue_date','title','scope','amount','notes'])field(name).value=d[name]??'';field('kind').disabled=true;root.querySelector('#pwHeading').textContent='Edit draft';root.querySelector('#pwNumber').textContent=d.document_number;dirty=false;}
+  function edit(d){editing=d;requestId=d.id;for(const name of ['kind','project_id','client_name','client_email','client_phone','project_address','issue_date','title','scope','amount','notes'])field(name).value=d[name]??'';field('kind').disabled=true;root.querySelector('#pwTypeLabel').hidden=true;root.querySelector('#pwEditType').hidden=false;root.querySelector('#pwEditType').textContent=labels[d.kind]+' · '+d.document_number+'. Use New estimate, New invoice or New proposal above to create a different document.';root.querySelector('#pwHeading').textContent='Edit draft';root.querySelector('#pwNumber').textContent=d.document_number;dirty=false;}
   list.onclick=async event=>{const button=event.target.closest('button[data-action]');if(!button||busy)return;const d=documents.find(d=>d.id===button.dataset.id);if(!d)return;
     if(button.dataset.action==='edit'){if(!dirty||confirm('Discard unsaved changes?'))edit(d);return;}
-    if(button.dataset.action==='print'){
-      const win=window.open('','_blank');if(!win){message('Allow pop-ups to preview and print this document.',true);return;}
-      win.opener=null;win.document.open();win.document.write(documentHtml(d,new URL('/assets/la-original-logo.png',location.origin).href));win.document.close();
-      win.document.getElementById('printDocument').onclick=()=>win.print();return;
-    }
     const status=button.dataset.action==='issue'?'issued':'void';
     if(dirty&&editing?.id===d.id){message('Save your edits before changing this document status.',true);return;}
     if(!confirm(status==='issued'?`Mark ${d.document_number} issued? It will become read-only. This does not send it to the client.`:`Void ${d.document_number}? The number and record will be retained.`))return;
