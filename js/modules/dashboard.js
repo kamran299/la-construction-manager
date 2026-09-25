@@ -1,6 +1,6 @@
 import { createPaperworkModule } from "./paperwork.js?v=20260924-phone-5";
 import { createProjectsModule } from "./projects.js?v=20260924-phone-5";
-import { createReportsModule } from "./reports.js?v=20260925-edit-2";
+import { createReportsModule } from "./reports.js?v=20260925-owner-1";
 import { createTeamModule } from "./team.js?v=20260826-member-phone-login-1";
 import { createTasksModule } from "./tasks.js?v=20260831-task-resolution-1";
 import { createAlertsModule, createFilesModule, createInspectionsModule, createLaborModule, createMaterialsModule, createScheduleModule, createSubcontractorsModule } from "./operations.js?v=20260826-manager-labor-1";

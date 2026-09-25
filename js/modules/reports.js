@@ -1,4 +1,4 @@
-import { saveReportEdit } from './report-editing.js?v=20260925-1';
+import { saveReportEdit } from './report-editing.js?v=20260925-owner-1';
 function escapeHtml(value) { return String(value || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[c]); }
 function today() { return new Date().toLocaleDateString("en-CA"); }
 
@@ -283,6 +283,7 @@ function openPdfPrintView({ title, subtitle, body }) {
 }
 
 export function createReportsModule({ supabase, session, companyId, membership, canManage }) {
+  const canEditAll = membership.role === "owner_admin";
   const form = document.querySelector("#reportForm");
   const list = document.querySelector("#reportsList");
   const message = document.querySelector("#reportsMessage");
@@ -565,7 +566,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
       const project = projects.find((p) => p.id === r.project_id);
       const canDelete = canManage || r.reporter_id === session.user.id;
       const structured = parseDailySummary(r.english_summary);
-      return `<article class="workspace-card report-card"><header><div><strong>${escapeHtml(r.reporter_name)}</strong><small>${escapeHtml(r.reporter_email || "")}</small></div><div class="report-card-actions"><span>${escapeHtml(project?.name || "General")}</span>${r.reporter_id === session.user.id ? `<button type="button" data-edit-report="${r.id}">Edit report</button>` : ""}${canDelete ? `<button class="report-delete-button" type="button" data-delete-report="${r.id}">Delete</button>` : ""}</div></header><div class="report-english report-english-only"><p>${escapeHtml(r.english_text)}</p>${renderStructuredReport(r.english_summary)}${renderAiUsage(structured?.ai_usage)}${renderReportPhotos(r)}</div></article>`;
+      return `<article class="workspace-card report-card"><header><div><strong>${escapeHtml(r.reporter_name)}</strong><small>${escapeHtml(r.reporter_email || "")}</small></div><div class="report-card-actions"><span>${escapeHtml(project?.name || "General")}</span>${(canEditAll || r.reporter_id === session.user.id) ? `<button type="button" data-edit-report="${r.id}">Edit report</button>` : ""}${canDelete ? `<button class="report-delete-button" type="button" data-delete-report="${r.id}">Delete</button>` : ""}</div></header><div class="report-english report-english-only"><p>${escapeHtml(r.english_text)}</p>${renderStructuredReport(r.english_summary)}${renderAiUsage(structured?.ai_usage)}${renderReportPhotos(r)}</div></article>`;
     }).join("") : '<div class="empty-projects">No reports were submitted for this date.</div>';
     list.querySelectorAll("[data-delete-report]").forEach((button) => {
       button.addEventListener("click", () => deleteReport(button.dataset.deleteReport, button));
@@ -585,7 +586,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
 
   function editReport(reportId, button) {
     const report = reports.find(r => r.id === reportId);
-    if (!report || report.reporter_id !== session.user.id) return;
+    if (!report || (!canEditAll && report.reporter_id !== session.user.id)) return;
     const card = button.closest(".report-card");
     if (card.querySelector(".report-edit-form")) return;
     const editor = document.createElement("form");
@@ -606,7 +607,7 @@ export function createReportsModule({ supabase, session, companyId, membership, 
       status.textContent = "Saving changes...";
       try {
         const translated = await callAi({action:"translate",text,report_date:report.report_date});
-        await saveReportEdit({supabase,report,text,translated,userId:session.user.id,companyId});
+        await saveReportEdit({supabase,report,text,translated,userId:session.user.id,companyId,canEditAll});
         await loadReports();
         message.classList.remove("message-error");
         message.textContent = "Report updated. Existing photos are preserved. Regenerate the daily analysis to include the correction; review existing tasks separately.";

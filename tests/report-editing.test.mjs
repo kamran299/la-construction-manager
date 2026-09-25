@@ -9,3 +9,6 @@ test('cannot edit another reporter or company',async()=>{for(const change of [{u
 test('stale or missing report is not reported saved',async()=>{await assert.rejects(saveReportEdit({...args,...setup(null)}),/changed/);});
 test('database failure is propagated',async()=>{await assert.rejects(saveReportEdit({...args,...setup(null,new Error('denied'))}),/denied/);});
 test('incomplete translation never writes',async()=>{const x=setup();await assert.rejects(saveReportEdit({...args,...x,translated:{english_text:''}}),/translation/);assert.equal(x.calls.length,0);});
+
+test('owner uses authorized RPC for another author',async()=>{let payload;const supabase={rpc:async(name,p)=>{assert.equal(name,'edit_team_report');payload=p;return{data:{id:'r'}}}};await saveReportEdit({...args,supabase,userId:'owner',canEditAll:true});assert.equal(payload.p_expected_original,'original');assert.equal(payload.p_company,'c');});
+test('missing owner RPC clearly reports activation needed',async()=>{const supabase={rpc:async()=>({error:{code:'PGRST202'}})};await assert.rejects(saveReportEdit({...args,supabase,userId:'owner',canEditAll:true}),/activation/);});

@@ -14,6 +14,7 @@ await page.evaluate(async()=>{
  const own={id:'own',company_id:'company',reporter_id:'worker',reporter_name:'Test worker',original_text:'Original report',english_text:'Original English report',english_summary:'{}',report_photos:[],report_date:'2026-09-25'};
  window.rows=[own,{...own,id:'other',reporter_id:'another'}];window.failSave=false;
  const supabase={from(table){let patch;const filters=[];const q={select(){return q},eq(k,v){filters.push([k,v]);return q},order(){return q},update(v){patch=v;return q},async maybeSingle(){if(patch){if(window.failSave)return{data:null,error:null};const row=window.rows.find(r=>filters.every(([k,v])=>r[k]===v));if(row)Object.assign(row,patch);return{data:row?{id:row.id}:null,error:null}}return{data:null,error:null}},then(resolve){return Promise.resolve({data:table==='daily_reports'?window.rows:[],error:null}).then(resolve)}};return q}};
+ window.testSb=supabase;
  const {createReportsModule}=await import('/js/modules/reports.js');const module=createReportsModule({supabase,session:{user:{id:'worker'},access_token:'fixture'},companyId:'company',membership:{},canManage:false});await module.load();
  let node=document.querySelector('#reportsView');while(node){node.hidden=false;node.style.display='block';node=node.parentElement;}
 });
@@ -21,5 +22,10 @@ assert.equal(await page.locator('[data-edit-report]').count(),1);
 await page.locator('[data-edit-report]').click();await page.locator('.report-edit-form textarea').fill('Cancel this correction');await page.locator('[data-cancel-edit]').click();assert.equal(await page.locator('.report-edit-form').count(),0);
 await page.locator('[data-edit-report]').click();await page.locator('.report-edit-form textarea').fill('New corrected report');await page.locator('.report-edit-form button[type=submit]').click();await page.waitForFunction(()=>window.rows[0].original_text==='New corrected report');assert.equal(await page.locator('.report-edit-form').count(),0);assert.equal(await page.locator('.report-card').first().locator('.report-english p').first().innerText(),'Corrected English report');
 await page.evaluate(()=>window.failSave=true);await page.locator('[data-edit-report]').click();await page.locator('.report-edit-form textarea').fill('Keep my correction');await page.locator('.report-edit-form button[type=submit]').click();await page.waitForFunction(()=>document.querySelector('[data-edit-message]')?.textContent.includes('changed'));assert.equal(await page.locator('.report-edit-form textarea').inputValue(),'Keep my correction');
-console.log('Browser checks passed: edit visible for author only, cancel, save/reload, stale save preserves correction.');
+await page.evaluate(async()=>{
+ window.testSb.rpc=async(name,p)=>{window.ownerRpc=name;const r=window.rows.find(r=>r.id===p.p_id);Object.assign(r,{original_text:p.p_original,english_text:p.p_english,english_summary:p.p_summary});return{data:r}};
+ const {createReportsModule}=await import('/js/modules/reports.js');await createReportsModule({supabase:window.testSb,session:{user:{id:'owner'},access_token:'fixture'},companyId:'company',membership:{role:'owner_admin'},canManage:true}).load();
+});
+assert.equal(await page.locator('[data-edit-report]').count(),2);await page.locator('[data-edit-report="other"]').click();await page.locator('.report-edit-form textarea').fill('Owner correction');await page.locator('.report-edit-form button[type=submit]').click();await page.waitForFunction(()=>window.ownerRpc==='edit_team_report');assert.equal(await page.evaluate(()=>window.rows[1].original_text),'Owner correction');
+console.log('Browser checks passed: owner edits team via authorized RPC; edit visible for author only, cancel, save/reload, stale save preserves correction.');
 }finally{await browser.close();server.close();}
