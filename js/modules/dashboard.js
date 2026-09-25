@@ -1,5 +1,5 @@
-import { createPaperworkModule } from "./paperwork.js?v=20260924-print-3";
-import { createProjectsModule } from "./projects.js?v=20260924-print-3";
+import { createPaperworkModule } from "./paperwork.js?v=20260924-pdf-4";
+import { createProjectsModule } from "./projects.js?v=20260924-pdf-4";
 import { createReportsModule } from "./reports.js?v=20260831-task-resolution-1";
 import { createTeamModule } from "./team.js?v=20260826-member-phone-login-1";
 import { createTasksModule } from "./tasks.js?v=20260831-task-resolution-1";

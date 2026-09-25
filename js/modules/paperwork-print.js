@@ -1,5 +1,7 @@
 import { getSupabaseClient } from '../services/supabase.js';
-import { documentHtml } from './paperwork.js?v=20260924-print-3';
+import { documentHtml } from './paperwork.js?v=20260924-pdf-4';
+
+import { createDocumentPdf } from './paperwork-pdf.js?v=20260924-pdf-4';
 
 async function start() {
   try {
@@ -21,15 +23,14 @@ async function start() {
     const back=document.createElement('a');back.href='/login#paperwork';back.textContent='Back to Paperwork';back.style.marginLeft='20px';button.parentElement.append(back);
     const status=document.createElement('p');status.setAttribute('role','status');button.parentElement.append(status);
     try {
-      const logo=document.querySelector('header img');
-      if(logo.decode) await logo.decode();
-      else if(!logo.complete) await new Promise((resolve,reject)=>{logo.onload=resolve;logo.onerror=()=>reject(new Error('Letterhead image could not load'));});
-      if(!logo.naturalWidth) throw new Error('Letterhead image could not load');
-      if(document.fonts?.ready) await document.fonts.ready;
-      // Content stays in this real page; Safari prints after resources are ready.
-      button.textContent='Print / Save as PDF';button.disabled=false;
-      button.onclick=()=>window.print();
-    } catch(error) {status.textContent='The letterhead could not load. Refresh this page before printing.';button.textContent='Print unavailable';}
+      const bytes=await createDocumentPdf(d);
+      const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+      const download=document.createElement('a');download.href=url;download.download=d.document_number+'.pdf';download.textContent='Download PDF';download.id='downloadPdf';
+      button.replaceWith(download);
+      const open=document.createElement('a');open.href=url;open.target='_blank';open.rel='noopener';open.textContent='Open PDF to print';open.style.marginLeft='20px';download.after(open);
+      status.textContent='Your PDF is ready. Download it, or open the PDF to print.';
+      window.addEventListener('pagehide',()=>URL.revokeObjectURL(url),{once:true});
+    } catch(error) {status.textContent='PDF could not be prepared: '+error.message;button.textContent='PDF unavailable';}
   } catch(error) {
     document.getElementById('printStatus').textContent='Document could not be opened.';
     const output=document.getElementById('printError');output.hidden=false;output.textContent=error.message;

@@ -1,13 +1,14 @@
-const labels = { estimate: 'Estimate', invoice: 'Invoice', proposal: 'Proposal' };
+const labels = { estimate: 'Estimate', invoice: 'Invoice', proposal: 'Proposal', change_order: 'Change order' };
 export function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-export function amountInCents(value) {
+export function amountInCents(value, allowAdjustment = false) {
   const text = String(value).trim();
-  if (!/^\d{1,12}(\.\d{1,2})?$/.test(text)) throw new Error('Enter a positive amount with up to two decimal places.');
-  const [whole, fraction = ''] = text.split('.');
-  const cents = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
-  if (!Number.isSafeInteger(cents) || cents <= 0) throw new Error('Enter a valid positive amount.');
+  if (!(allowAdjustment ? /^-?\d{1,12}(\.\d{1,2})?$/ : /^\d{1,12}(\.\d{1,2})?$/).test(text)) throw new Error('Enter a positive amount with up to two decimal places.');
+  const sign=text.startsWith('-')?-1:1;
+  const [whole, fraction = ''] = text.replace(/^-/, '').split('.');
+  const cents = sign*(Number(whole) * 100 + Number(fraction.padEnd(2, '0')));
+  if (!Number.isSafeInteger(cents) || (!allowAdjustment && cents <= 0)) throw new Error('Enter a valid positive amount.');
   return cents;
 }
 const money = value => new Intl.NumberFormat('en-US', {style:'currency',currency:'USD'}).format(Number(value));
@@ -21,17 +22,17 @@ export function documentHtml(d, logoUrl) {
   <header><img src="${e(logoUrl)}" alt="L&A Custom Homes Inc."><p>License #1007023<br>Tel: (408) 387-0999</p></header>
   <h1>${e(labels[d.kind] || 'Document').toUpperCase()}</h1>${d.status === 'issued' ? '' : `<p class="stamp">${e(d.status.toUpperCase())}</p>`}
   <dl><dt>${e(labels[d.kind])} number</dt><dd>${e(d.document_number)}</dd><dt>Date</dt><dd>${e(date)}</dd><dt>${d.kind==='invoice'?'Bill to':'Prepared for'}</dt><dd>${e(d.client_name)}</dd>${d.client_email ? `<dt>Email</dt><dd>${e(d.client_email)}</dd>` : ''}${d.client_phone ? `<dt>Phone</dt><dd>${e(d.client_phone)}</dd>` : ''}<dt>Property</dt><dd>${e(d.project_address)}</dd></dl>
-  <h2>${e(d.title)}</h2><div class="scope">${e(d.scope)}</div><div class="total"><strong>${d.kind==='invoice'?'Invoice total':'Total labor &amp; materials'}</strong><strong>${e(money(d.amount))}</strong></div>
+  <h2>${e(d.title)}</h2><div class="scope">${e(d.scope)}</div><div class="total"><strong>${d.kind==='change_order'?'Change order adjustment':d.kind==='invoice'?'Invoice total':'Total labor &amp; materials'}</strong><strong>${e(money(d.amount))}</strong></div>
   ${d.notes ? `<h2>Notes</h2><div class="notes">${e(d.notes)}</div>`:''}</body></html>`;
 }
 export function createPaperworkModule({supabase,companyId}) {
   const root=document.querySelector('#paperworkView');
   let documents=[],projects=[],editing=null,requestId=crypto.randomUUID(),busy=false,dirty=false;
-  root.innerHTML=`<header class="dashboard-header"><div><p class="eyebrow">Private workspace</p><h1>Paperwork</h1><p>Estimates, invoices and proposals on your L&A letterhead.</p></div></header>
-  <div class="pw-actions pw-create-types" aria-label="Create a document"><button type="button" data-new-kind="estimate">New estimate</button><button type="button" data-new-kind="invoice">New invoice</button><button type="button" data-new-kind="proposal">New proposal</button></div>
+  root.innerHTML=`<header class="dashboard-header"><div><p class="eyebrow">Private workspace</p><h1>Paperwork</h1><p>Estimates, invoices, proposals and change orders on your L&A letterhead.</p></div></header>
+  <div class="pw-actions pw-create-types" aria-label="Create a document"><button type="button" data-new-kind="estimate">New estimate</button><button type="button" data-new-kind="invoice">New invoice</button><button type="button" data-new-kind="proposal">New proposal</button><button type="button" data-new-kind="change_order">New change order</button></div>
   <p id="pwMessage" role="status" aria-live="polite"></p>
   <div class="pw-grid"><section class="workspace-card"><h2 id="pwHeading">New document</h2>
-  <form id="pwForm"><p id="pwEditType" hidden></p><label id="pwTypeLabel">Document type<select name="kind"><option value="estimate">Estimate</option><option value="invoice">Invoice</option><option value="proposal">Proposal</option></select></label>
+  <form id="pwForm"><p id="pwEditType" hidden></p><label id="pwTypeLabel">Document type<select name="kind"><option value="estimate">Estimate</option><option value="invoice">Invoice</option><option value="proposal">Proposal</option><option value="change_order">Change order</option></select></label>
   <label>Project<select name="project_id"><option value="">Other / enter address</option></select></label>
   <label>Client name<input name="client_name" maxlength="300" required autocomplete="name"></label>
   <label>Client email<input name="client_email" type="email" maxlength="320" autocomplete="email"></label>
@@ -40,8 +41,8 @@ export function createPaperworkModule({supabase,companyId}) {
   <label>Date<input name="issue_date" type="date" required></label>
   <label>Title<input name="title" maxlength="300" required placeholder="Countertop work"></label>
   <label>Scope / description<textarea name="scope" rows="6" maxlength="30000" required></textarea></label>
-  <label>Total amount (USD)<input name="amount" type="text" inputmode="decimal" required placeholder="30000.00"></label>
-  <label>Notes / agreed payment terms (optional)<textarea name="notes" rows="3" maxlength="10000"></textarea></label>
+  <label><span id="pwAmountLabel">Total amount (USD)</span><input name="amount" type="text" inputmode="decimal" required placeholder="30000.00"></label>
+  <label>Notes / contract reference / schedule impact (optional)<textarea name="notes" rows="3" maxlength="10000"></textarea></label>
   <p id="pwNumber">A unique document number is assigned when you save.</p>
   <div class="pw-actions"><button class="primary-button" id="pwSave" type="submit">Save draft</button><button class="secondary-button" id="pwNew" type="button">New document</button></div>
   </form></section><section class="workspace-card"><h2>Saved documents</h2><label>Search<input id="pwSearch" type="search" placeholder="Number, client or address"></label><button id="pwRefresh" class="secondary-button" type="button">Refresh list</button><div id="pwList"></div></section></div>`;
@@ -49,9 +50,11 @@ export function createPaperworkModule({supabase,companyId}) {
   const field=name=>form.elements.namedItem(name);
   function message(text,error=false){const el=root.querySelector('#pwMessage');el.textContent=text;el.className=error?'message message-error':'message';}
   function lock(value){busy=value;root.querySelectorAll('button').forEach(b=>b.disabled=value);form.querySelectorAll('input,textarea,select').forEach(el=>el.disabled=value);if(!value)field('kind').disabled=Boolean(editing);}
-  function reset(kind='estimate'){editing=null;requestId=crypto.randomUUID();form.reset();field('kind').value=kind;field('kind').disabled=false;root.querySelector('#pwTypeLabel').hidden=false;root.querySelector('#pwEditType').hidden=true;field('issue_date').value=localDate();root.querySelector('#pwHeading').textContent='New document';root.querySelector('#pwNumber').textContent='A unique document number is assigned when you save.';dirty=false;}
+  function updateAmountLabel(){root.querySelector('#pwAmountLabel').textContent=field('kind').value==='change_order'?'Change amount (USD): positive addition, negative credit, or 0':'Total amount (USD)';}
+  field('kind').addEventListener('change',updateAmountLabel);
+  function reset(kind='estimate'){editing=null;requestId=crypto.randomUUID();form.reset();field('kind').value=kind;field('kind').disabled=false;root.querySelector('#pwTypeLabel').hidden=false;root.querySelector('#pwEditType').hidden=true;updateAmountLabel();field('issue_date').value=localDate();root.querySelector('#pwHeading').textContent='New document';root.querySelector('#pwNumber').textContent='A unique document number is assigned when you save.';dirty=false;}
   function renderList(){const q=root.querySelector('#pwSearch').value.toLowerCase();const matches=documents.filter(d=>[d.document_number,d.client_name,d.project_address,d.title].join(' ').toLowerCase().includes(q));
-    list.innerHTML=matches.length?matches.map(d=>`<article class="pw-document"><strong>${escapeHtml(d.document_number)}</strong><span class="pw-status">${escapeHtml(d.status)}</span><p>${escapeHtml(d.client_name)}<br>${escapeHtml(d.project_address)}</p><p>${escapeHtml(d.title)} · ${escapeHtml(money(d.amount))}<br>${escapeHtml(d.issue_date)}</p><div class="pw-actions">${d.status==='draft'?`<button data-action="edit" data-id="${escapeHtml(d.id)}">Edit</button><button data-action="issue" data-id="${escapeHtml(d.id)}">Mark issued</button>`:''}<a class="pw-print-link" href="/paperwork-print.html?id=${encodeURIComponent(d.id)}" target="_blank" rel="noopener">Print / PDF</a>${d.status!=='void'?`<button data-action="void" data-id="${escapeHtml(d.id)}">Void</button>`:''}</div></article>`).join(''):'<p>No matching documents.</p>';
+    list.innerHTML=matches.length?matches.map(d=>`<article class="pw-document"><strong>${escapeHtml(d.document_number)}</strong><span class="pw-status">${escapeHtml(d.status)}</span><p>${escapeHtml(d.client_name)}<br>${escapeHtml(d.project_address)}</p><p>${escapeHtml(d.title)} · ${escapeHtml(money(d.amount))}<br>${escapeHtml(d.issue_date)}</p><div class="pw-actions">${d.status==='draft'?`<button data-action="edit" data-id="${escapeHtml(d.id)}">Edit</button><button data-action="issue" data-id="${escapeHtml(d.id)}">Mark issued</button>`:''}<a class="pw-print-link" href="/paperwork-print.html?id=${encodeURIComponent(d.id)}" target="_blank" rel="noopener">Download / Print PDF</a>${d.status!=='void'?`<button data-action="void" data-id="${escapeHtml(d.id)}">Void</button>`:''}</div></article>`).join(''):'<p>No matching documents.</p>';
   }
   async function fetchDocuments(){const {data,error}=await supabase.from('paperwork_documents').select('*').eq('company_id',companyId).order('created_at',{ascending:false});if(error)throw error;documents=data||[];renderList();}
   async function load(){if(busy)return;lock(true);try{
@@ -67,13 +70,13 @@ export function createPaperworkModule({supabase,companyId}) {
   root.querySelectorAll('[data-new-kind]').forEach(button=>{button.onclick=()=>{if(!dirty||confirm('Discard unsaved changes and start a new document?'))reset(button.dataset.newKind);};});
   root.querySelector('#pwNew').onclick=()=>{if(!dirty||confirm('Discard unsaved changes and start a new document?'))reset();};
   form.onsubmit=async event=>{event.preventDefault();if(busy||!form.reportValidity())return;
-    let cents;try{cents=amountInCents(field('amount').value);}catch(e){message(e.message,true);return;}
+    let cents;try{cents=amountInCents(field('amount').value,field('kind').value==='change_order');}catch(e){message(e.message,true);return;}
     lock(true);try{const {data,error}=await supabase.rpc('save_paperwork_with_client',{
       p_id:requestId,p_company_id:companyId,p_project_id:field('project_id').value||null,p_kind:field('kind').value,p_issue_date:field('issue_date').value,
       p_client_name:field('client_name').value.trim(),p_client_email:field('client_email').value.trim(),p_client_phone:field('client_phone').value.trim(),p_project_address:field('project_address').value.trim(),p_title:field('title').value.trim(),p_scope:field('scope').value.trim(),p_amount:(cents/100).toFixed(2),p_notes:field('notes').value,p_expected_version:editing?.version||0});
       if(error)throw error;const saved=Array.isArray(data)?data[0]:data;edit(saved);await fetchDocuments();message('Saved '+saved.document_number+'. Print the draft or mark it issued when ready.');
     }catch(error){message('Could not save: '+error.message,true);}finally{lock(false);}};
-  function edit(d){editing=d;requestId=d.id;for(const name of ['kind','project_id','client_name','client_email','client_phone','project_address','issue_date','title','scope','amount','notes'])field(name).value=d[name]??'';field('kind').disabled=true;root.querySelector('#pwTypeLabel').hidden=true;root.querySelector('#pwEditType').hidden=false;root.querySelector('#pwEditType').textContent=labels[d.kind]+' · '+d.document_number+'. Use New estimate, New invoice or New proposal above to create a different document.';root.querySelector('#pwHeading').textContent='Edit draft';root.querySelector('#pwNumber').textContent=d.document_number;dirty=false;}
+  function edit(d){editing=d;requestId=d.id;for(const name of ['kind','project_id','client_name','client_email','client_phone','project_address','issue_date','title','scope','amount','notes'])field(name).value=d[name]??'';field('kind').disabled=true;updateAmountLabel();root.querySelector('#pwTypeLabel').hidden=true;root.querySelector('#pwEditType').hidden=false;root.querySelector('#pwEditType').textContent=labels[d.kind]+' · '+d.document_number+'. Use a New document button above to create a different document.';root.querySelector('#pwHeading').textContent='Edit draft';root.querySelector('#pwNumber').textContent=d.document_number;dirty=false;}
   list.onclick=async event=>{const button=event.target.closest('button[data-action]');if(!button||busy)return;const d=documents.find(d=>d.id===button.dataset.id);if(!d)return;
     if(button.dataset.action==='edit'){if(!dirty||confirm('Discard unsaved changes?'))edit(d);return;}
     const status=button.dataset.action==='issue'?'issued':'void';
