@@ -1,3 +1,4 @@
+import { saveReportEdit } from './report-editing.js?v=20260925-1';
 function escapeHtml(value) { return String(value || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[c]); }
 function today() { return new Date().toLocaleDateString("en-CA"); }
 
@@ -564,11 +565,12 @@ export function createReportsModule({ supabase, session, companyId, membership, 
       const project = projects.find((p) => p.id === r.project_id);
       const canDelete = canManage || r.reporter_id === session.user.id;
       const structured = parseDailySummary(r.english_summary);
-      return `<article class="workspace-card report-card"><header><div><strong>${escapeHtml(r.reporter_name)}</strong><small>${escapeHtml(r.reporter_email || "")}</small></div><div class="report-card-actions"><span>${escapeHtml(project?.name || "General")}</span>${canDelete ? `<button class="report-delete-button" type="button" data-delete-report="${r.id}">Delete</button>` : ""}</div></header><div class="report-english report-english-only"><p>${escapeHtml(r.english_text)}</p>${renderStructuredReport(r.english_summary)}${renderAiUsage(structured?.ai_usage)}${renderReportPhotos(r)}</div></article>`;
+      return `<article class="workspace-card report-card"><header><div><strong>${escapeHtml(r.reporter_name)}</strong><small>${escapeHtml(r.reporter_email || "")}</small></div><div class="report-card-actions"><span>${escapeHtml(project?.name || "General")}</span>${r.reporter_id === session.user.id ? `<button type="button" data-edit-report="${r.id}">Edit report</button>` : ""}${canDelete ? `<button class="report-delete-button" type="button" data-delete-report="${r.id}">Delete</button>` : ""}</div></header><div class="report-english report-english-only"><p>${escapeHtml(r.english_text)}</p>${renderStructuredReport(r.english_summary)}${renderAiUsage(structured?.ai_usage)}${renderReportPhotos(r)}</div></article>`;
     }).join("") : '<div class="empty-projects">No reports were submitted for this date.</div>';
     list.querySelectorAll("[data-delete-report]").forEach((button) => {
       button.addEventListener("click", () => deleteReport(button.dataset.deleteReport, button));
     });
+    list.querySelectorAll("[data-edit-report]").forEach(button => button.addEventListener("click", () => editReport(button.dataset.editReport, button)));
     const [savedResult, taskStatusResult] = await Promise.all([
       supabase.from("daily_report_summaries").select("english_summary").eq("company_id", companyId).eq("report_date", filterDate.value).maybeSingle(),
       supabase.from("work_tasks").select("id,legacy_key,status,updated_at").eq("company_id", companyId),
@@ -577,8 +579,44 @@ export function createReportsModule({ supabase, session, companyId, membership, 
     savedSummaryValue = saved?.english_summary || "";
     summary.innerHTML = "";
     summary.hidden = !saved;
-    if (saved) summary.innerHTML = renderDailySummary(taskStatusResult.error ? saved.english_summary : applyDatabaseTaskStatuses(saved.english_summary, taskStatusResult.data || []));
+    if (saved) summary.innerHTML = '<p class="message">Saved analysis is a snapshot. Regenerate it after editing reports; existing assigned tasks are unchanged.</p>' + renderDailySummary(taskStatusResult.error ? saved.english_summary : applyDatabaseTaskStatuses(saved.english_summary, taskStatusResult.data || []));
     setPdfAvailability();
+  }
+
+  function editReport(reportId, button) {
+    const report = reports.find(r => r.id === reportId);
+    if (!report || report.reporter_id !== session.user.id) return;
+    const card = button.closest(".report-card");
+    if (card.querySelector(".report-edit-form")) return;
+    const editor = document.createElement("form");
+    editor.className = "report-edit-form";
+    editor.innerHTML = `<label>Report details<textarea rows="8" dir="auto" required maxlength="30000"></textarea></label><p>Existing photos, project and work date will stay attached. Saving regenerates the English report.</p><button type="submit">Save changes</button> <button type="button" data-cancel-edit>Cancel</button><p role="status" data-edit-message></p>`;
+    const input = editor.querySelector("textarea");
+    input.value = report.original_text || report.english_text;
+    const controls = card.querySelectorAll(".report-card-actions button");
+    controls.forEach(b => b.disabled = true);
+    function close() { editor.remove(); controls.forEach(b => b.disabled = false); }
+    editor.querySelector("[data-cancel-edit]").onclick = close;
+    editor.onsubmit = async event => {
+      event.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      editor.querySelectorAll("button,textarea").forEach(e => e.disabled = true);
+      const status = editor.querySelector("[data-edit-message]");
+      status.textContent = "Saving changes...";
+      try {
+        const translated = await callAi({action:"translate",text,report_date:report.report_date});
+        await saveReportEdit({supabase,report,text,translated,userId:session.user.id,companyId});
+        await loadReports();
+        message.classList.remove("message-error");
+        message.textContent = "Report updated. Existing photos are preserved. Regenerate the daily analysis to include the correction; review existing tasks separately.";
+        message.hidden = false;
+      } catch (error) {
+        status.textContent = error.message || "Changes could not be saved. Your edited text is still here.";
+        editor.querySelectorAll("button,textarea").forEach(e => e.disabled = false);
+      }
+    };
+    card.append(editor); input.focus();
   }
 
   async function deleteReport(reportId, button) {
