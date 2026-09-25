@@ -1,3 +1,4 @@
+import { formatPhone, bindPhoneInput } from './phone-format.js';
 const labels = { estimate: 'Estimate', invoice: 'Invoice', proposal: 'Proposal', change_order: 'Change order' };
 export function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -21,7 +22,7 @@ export function documentHtml(d, logoUrl) {
   </style></head><body><div class="tools"><button id="printDocument">Print / Save as PDF</button></div>
   <header><img src="${e(logoUrl)}" alt="L&A Custom Homes Inc."><p>License #1007023<br>Tel: (408) 387-0999</p></header>
   <h1>${e(labels[d.kind] || 'Document').toUpperCase()}</h1>${d.status === 'issued' ? '' : `<p class="stamp">${e(d.status.toUpperCase())}</p>`}
-  <dl><dt>${e(labels[d.kind])} number</dt><dd>${e(d.document_number)}</dd><dt>Date</dt><dd>${e(date)}</dd><dt>${d.kind==='invoice'?'Bill to':'Prepared for'}</dt><dd>${e(d.client_name)}</dd>${d.client_email ? `<dt>Email</dt><dd>${e(d.client_email)}</dd>` : ''}${d.client_phone ? `<dt>Phone</dt><dd>${e(d.client_phone)}</dd>` : ''}<dt>Property</dt><dd>${e(d.project_address)}</dd></dl>
+  <dl><dt>${e(labels[d.kind])} number</dt><dd>${e(d.document_number)}</dd><dt>Date</dt><dd>${e(date)}</dd><dt>${d.kind==='invoice'?'Bill to':'Prepared for'}</dt><dd>${e(d.client_name)}</dd>${d.client_email ? `<dt>Email</dt><dd>${e(d.client_email)}</dd>` : ''}${d.client_phone ? `<dt>Phone</dt><dd>${e(formatPhone(d.client_phone))}</dd>` : ''}<dt>Property</dt><dd>${e(d.project_address)}</dd></dl>
   <h2>${e(d.title)}</h2><div class="scope">${e(d.scope)}</div><div class="total"><strong>${d.kind==='change_order'?'Change order adjustment':d.kind==='invoice'?'Invoice total':'Total labor &amp; materials'}</strong><strong>${e(money(d.amount))}</strong></div>
   ${d.notes ? `<h2>Notes</h2><div class="notes">${e(d.notes)}</div>`:''}</body></html>`;
 }
@@ -48,6 +49,7 @@ export function createPaperworkModule({supabase,companyId}) {
   </form></section><section class="workspace-card"><h2>Saved documents</h2><label>Search<input id="pwSearch" type="search" placeholder="Number, client or address"></label><button id="pwRefresh" class="secondary-button" type="button">Refresh list</button><div id="pwList"></div></section></div>`;
   const form=root.querySelector('#pwForm'), list=root.querySelector('#pwList');
   const field=name=>form.elements.namedItem(name);
+  bindPhoneInput(field('client_phone'));
   function message(text,error=false){const el=root.querySelector('#pwMessage');el.textContent=text;el.className=error?'message message-error':'message';}
   function lock(value){busy=value;root.querySelectorAll('button').forEach(b=>b.disabled=value);form.querySelectorAll('input,textarea,select').forEach(el=>el.disabled=value);if(!value)field('kind').disabled=Boolean(editing);}
   function updateAmountLabel(){root.querySelector('#pwAmountLabel').textContent=field('kind').value==='change_order'?'Change amount (USD): positive addition, negative credit, or 0':'Total amount (USD)';}
@@ -64,7 +66,7 @@ export function createPaperworkModule({supabase,companyId}) {
     await fetchDocuments();message('Only your authorized account can access these documents.');
   }catch(error){message('Could not load paperwork. '+error.message,true);}finally{lock(false);}}
   form.addEventListener('input',()=>{dirty=true;});
-  field('project_id').addEventListener('change',()=>{const p=projects.find(p=>p.id===field('project_id').value);if(p){field('project_address').value=p.address||'';field('client_name').value=p.client_name||'';field('client_email').value=p.client_email||'';field('client_phone').value=p.client_phone||'';}else{for(const n of ['project_address','client_name','client_email','client_phone'])field(n).value='';}dirty=true;});
+  field('project_id').addEventListener('change',()=>{const p=projects.find(p=>p.id===field('project_id').value);if(p){field('project_address').value=p.address||'';field('client_name').value=p.client_name||'';field('client_email').value=p.client_email||'';field('client_phone').value=formatPhone(p.client_phone);}else{for(const n of ['project_address','client_name','client_email','client_phone'])field(n).value='';}dirty=true;});
   root.querySelector('#pwSearch').oninput=renderList;
   root.querySelector('#pwRefresh').onclick=load;
   root.querySelectorAll('[data-new-kind]').forEach(button=>{button.onclick=()=>{if(!dirty||confirm('Discard unsaved changes and start a new document?'))reset(button.dataset.newKind);};});
@@ -73,10 +75,10 @@ export function createPaperworkModule({supabase,companyId}) {
     let cents;try{cents=amountInCents(field('amount').value,field('kind').value==='change_order');}catch(e){message(e.message,true);return;}
     lock(true);try{const {data,error}=await supabase.rpc('save_paperwork_with_client',{
       p_id:requestId,p_company_id:companyId,p_project_id:field('project_id').value||null,p_kind:field('kind').value,p_issue_date:field('issue_date').value,
-      p_client_name:field('client_name').value.trim(),p_client_email:field('client_email').value.trim(),p_client_phone:field('client_phone').value.trim(),p_project_address:field('project_address').value.trim(),p_title:field('title').value.trim(),p_scope:field('scope').value.trim(),p_amount:(cents/100).toFixed(2),p_notes:field('notes').value,p_expected_version:editing?.version||0});
+      p_client_name:field('client_name').value.trim(),p_client_email:field('client_email').value.trim(),p_client_phone:formatPhone(field('client_phone').value),p_project_address:field('project_address').value.trim(),p_title:field('title').value.trim(),p_scope:field('scope').value.trim(),p_amount:(cents/100).toFixed(2),p_notes:field('notes').value,p_expected_version:editing?.version||0});
       if(error)throw error;const saved=Array.isArray(data)?data[0]:data;edit(saved);await fetchDocuments();message('Saved '+saved.document_number+'. Print the draft or mark it issued when ready.');
     }catch(error){message('Could not save: '+error.message,true);}finally{lock(false);}};
-  function edit(d){editing=d;requestId=d.id;for(const name of ['kind','project_id','client_name','client_email','client_phone','project_address','issue_date','title','scope','amount','notes'])field(name).value=d[name]??'';field('kind').disabled=true;updateAmountLabel();root.querySelector('#pwTypeLabel').hidden=true;root.querySelector('#pwEditType').hidden=false;root.querySelector('#pwEditType').textContent=labels[d.kind]+' · '+d.document_number+'. Use a New document button above to create a different document.';root.querySelector('#pwHeading').textContent='Edit draft';root.querySelector('#pwNumber').textContent=d.document_number;dirty=false;}
+  function edit(d){editing=d;requestId=d.id;for(const name of ['kind','project_id','client_name','client_email','client_phone','project_address','issue_date','title','scope','amount','notes'])field(name).value=d[name]??'';field('client_phone').value=formatPhone(field('client_phone').value);field('kind').disabled=true;updateAmountLabel();root.querySelector('#pwTypeLabel').hidden=true;root.querySelector('#pwEditType').hidden=false;root.querySelector('#pwEditType').textContent=labels[d.kind]+' · '+d.document_number+'. Use a New document button above to create a different document.';root.querySelector('#pwHeading').textContent='Edit draft';root.querySelector('#pwNumber').textContent=d.document_number;dirty=false;}
   list.onclick=async event=>{const button=event.target.closest('button[data-action]');if(!button||busy)return;const d=documents.find(d=>d.id===button.dataset.id);if(!d)return;
     if(button.dataset.action==='edit'){if(!dirty||confirm('Discard unsaved changes?'))edit(d);return;}
     const status=button.dataset.action==='issue'?'issued':'void';

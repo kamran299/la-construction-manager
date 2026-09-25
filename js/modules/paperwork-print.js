@@ -1,7 +1,7 @@
 import { getSupabaseClient } from '../services/supabase.js';
-import { documentHtml } from './paperwork.js?v=20260924-pdf-4';
+import { documentHtml } from './paperwork.js?v=20260924-phone-5';
 
-import { createDocumentPdf } from './paperwork-pdf.js?v=20260924-pdf-4';
+import { createDocumentPdf } from './paperwork-pdf.js?v=20260924-phone-5';
 
 async function start() {
   try {

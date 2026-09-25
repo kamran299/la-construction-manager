@@ -1,3 +1,4 @@
+import { formatPhone } from './phone-format.js';
 import { PDFDocument, rgb } from '../../assets/vendor/pdf-lib.esm.min.js';
 import '../../assets/vendor/fontkit.umd.min.js';
 const fontkit=globalThis.fontkit;
@@ -16,7 +17,7 @@ export async function createDocumentPdf(d) {
   line(kind.toUpperCase(),23,true);if(d.status!=='issued')line(d.status.toUpperCase(),10,true);gap();
   line(`${kind} number: ${d.document_number}`,11,true);line(`Date: ${d.issue_date}`);gap();
   line(`${d.kind==='invoice'?'Bill to':'Prepared for'}: ${d.client_name}`,11,true);
-  if(d.client_email)line(`Email: ${d.client_email}`);if(d.client_phone)line(`Phone: ${d.client_phone}`);line(`Property: ${d.project_address}`);gap();
+  if(d.client_email)line(`Email: ${d.client_email}`);if(d.client_phone)line(`Phone: ${formatPhone(d.client_phone)}`);line(`Property: ${d.project_address}`);gap();
   line(d.title,14,true);gap();line(d.scope);gap();
   line(`${d.kind==='change_order'?'Change order adjustment':d.kind==='invoice'?'Invoice total':'Total labor & materials'}: ${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(d.amount))}`,14,true);
   if(d.notes){gap();line('Notes',12,true);line(d.notes);}

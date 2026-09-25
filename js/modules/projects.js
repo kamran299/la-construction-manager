@@ -1,3 +1,4 @@
+import { formatPhone, bindPhoneInput } from './phone-format.js';
 import { enableAddressAutocomplete } from "../services/google-maps.js";
 import { buildProjectTasks, getProjectTemplate } from "../data/construction-template.js";
 
@@ -159,7 +160,7 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
     const files = project.project_files || [];
     list.innerHTML = `<article class="project-card project-detail-card">
       <div class="project-card-header"><div><h2>Construction plan</h2><div class="project-address">${escapeHtml(project.address || "No address")}</div></div><div class="overall-progress">${project.progress_percent}%</div></div>
-      ${canManage ? `<section class="project-client-summary"><h3>Client contact</h3><p>${escapeHtml(project.client_name || 'Client name not added')}<br>${escapeHtml(project.client_email || 'Email not added')}<br>${escapeHtml(project.client_phone || 'Phone not added')}</p></section>` : ''}
+      ${canManage ? `<section class="project-client-summary"><h3>Client contact</h3><p>${escapeHtml(project.client_name || 'Client name not added')}<br>${escapeHtml(project.client_email || 'Email not added')}<br>${escapeHtml(formatPhone(project.client_phone) || 'Phone not added')}</p></section>` : ''}
       ${canManage ? `<section class="project-management-panel">
         <div class="project-management-heading"><div><h2>Project settings</h2><p>Edit project details and client contact information.</p></div><button class="project-edit-toggle" type="button" data-toggle-project-edit>Edit project</button></div>
         <form class="project-edit-form" data-project-edit-form hidden>
@@ -168,7 +169,7 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
           <label>Address<input name="projectAddress" value="${escapeHtml(project.address || "")}" autocomplete="street-address"><small class="address-help">Choose a Google suggestion so the address and GPS location save together.</small></label>
           <label>Client name<input name="clientName" value="${escapeHtml(project.client_name || '')}" maxlength="300" autocomplete="name"></label>
           <label>Client email<input name="clientEmail" type="email" value="${escapeHtml(project.client_email || '')}" maxlength="320" autocomplete="email"></label>
-          <label>Client phone<input name="clientPhone" type="tel" value="${escapeHtml(project.client_phone || '')}" maxlength="80" autocomplete="tel"></label>
+          <label>Client phone<input name="clientPhone" type="tel" value="${escapeHtml(formatPhone(project.client_phone) || '')}" maxlength="80" autocomplete="tel"></label>
           <section class="project-gps-settings">
             <div><strong>Jobsite GPS area</strong><small>While you are physically at this project, press the button to set its center.</small></div>
             <label>Allowed radius (meters)<input name="geofenceRadius" type="number" min="50" max="2000" step="10" value="${project.geofence_radius_m || 250}" required></label>
@@ -243,6 +244,7 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
     }).catch(() => { editAddressInput.hidden = false; });
     list.querySelector("[data-toggle-project-edit]")?.addEventListener("click", () => { editForm.hidden = !editForm.hidden; });
     list.querySelector("[data-cancel-project-edit]")?.addEventListener("click", () => { editForm.hidden = true; });
+    bindPhoneInput(editForm?.elements.clientPhone);
     editForm?.addEventListener("submit", (event) => updateProject(event, project));
     list.querySelector("[data-set-project-gps]")?.addEventListener("click", async (event) => {
       const button = event.currentTarget;
@@ -293,7 +295,7 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
       p_geofence_radius_m: radius,
       p_client_name: event.currentTarget.elements.clientName.value.trim(),
       p_client_email: event.currentTarget.elements.clientEmail.value.trim(),
-      p_client_phone: event.currentTarget.elements.clientPhone.value.trim(),
+      p_client_phone: formatPhone(event.currentTarget.elements.clientPhone.value),
     });
     const savedProject = Array.isArray(savedProjectResult) ? savedProjectResult[0] : savedProjectResult;
     if (error) {
@@ -425,6 +427,7 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
 
   function showError(text) { message.textContent = text; message.hidden = false; }
 
+  bindPhoneInput(document.querySelector("#projectClientPhone"));
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     message.hidden = true;
@@ -438,7 +441,7 @@ export function createProjectsModule({ supabase, companyId, canManage, canDelete
     const { data: project, error } = await supabase.from("projects").insert({ company_id: companyId, name, address, project_type: projectType, latitude, longitude,
       client_name: document.querySelector('#projectClientName').value.trim(),
       client_email: document.querySelector('#projectClientEmail').value.trim(),
-      client_phone: document.querySelector('#projectClientPhone').value.trim() }).select().single();
+      client_phone: formatPhone(document.querySelector('#projectClientPhone').value) }).select().single();
     if (error) return showError("The project could not be created.");
     const template = getProjectTemplate(projectType);
     const phases = template.map(({ phase: phaseName }, index) => ({ project_id: project.id, name: phaseName, sort_order: index + 1, weight: 1 }));

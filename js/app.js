@@ -1,5 +1,5 @@
 import { createLoginModule } from "./modules/login.js?v=20260826-phone-member-fix-1";
-import { showDashboard } from "./modules/dashboard.js?v=20260924-pdf-4";
+import { showDashboard } from "./modules/dashboard.js?v=20260924-phone-5";
 import { getSupabaseClient } from "./services/supabase.js";
 
 const configMessage = document.querySelector("#configMessage");
