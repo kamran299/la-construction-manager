@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/login.css">
     <link rel="stylesheet" href="/css/dashboard.css?v=20260826-member-phone-login-1">
-    <script type="module" src="/js/app.js?v=20260924-paperwork-1"></script>
+    <script type="module" src="/js/app.js?v=20260924-client-2"></script>
     <link rel="stylesheet" href="/css/paperwork.css?v=20260924-1">
   </head>
   <body>
@@ -192,6 +192,12 @@
               </select>
               <label for="projectAddress">Address</label>
               <input id="projectAddress" name="address" autocomplete="street-address" placeholder="Start typing an address">
+              <label for="projectClientName">Client name</label>
+              <input id="projectClientName" name="clientName" maxlength="300" autocomplete="name">
+              <label for="projectClientEmail">Client email</label>
+              <input id="projectClientEmail" name="clientEmail" type="email" maxlength="320" autocomplete="email">
+              <label for="projectClientPhone">Client phone</label>
+              <input id="projectClientPhone" name="clientPhone" type="tel" maxlength="80" autocomplete="tel">
               <button id="createProjectButton" class="primary-button" type="submit">Create project</button>
             </form>
           </section>
