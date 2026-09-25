@@ -1,0 +1,5 @@
+#paperworkView[hidden],#paperworkNav[hidden]{display:none!important}
+.pw-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
+.pw-grid label{display:flex;flex-direction:column;gap:7px;margin:14px 0;font-weight:600}
+.pw-grid input,.pw-grid select,.pw-grid textarea{width:100%;box-sizing:border-box;border:1px solid #cbd2df;border-radius:9px;padding:11px;font:inherit;background:white;color:#172033}
+.pw-grid textarea{resize:vertical}.pw-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}.pw-actions button{border:1px solid #cbd2df;border-radius:8px;padding:10px 14px;cursor:pointer;font:inherit}.pw-actions button:disabled{opacity:.5;cursor:wait}.pw-document{padding:20px 0;border-bottom:1px solid #dce1e8;overflow-wrap:anywhere}.pw-document p{line-height:1.6}.pw-status{margin-left:12px;font-size:12px;text-transform:uppercase;color:#9d480e}.pw-grid input:focus,.pw-grid textarea:focus,.pw-grid select:focus{outline:3px solid #ffbd92;outline-offset:2px}#pwMessage:empty{display:none}@media(max-width:1100px){.pw-grid{grid-template-columns:1fr}}

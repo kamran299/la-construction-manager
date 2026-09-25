@@ -1,3 +1,4 @@
+import { createPaperworkModule } from "./paperwork.js?v=20260924-1";
 import { createProjectsModule } from "./projects.js";
 import { createReportsModule } from "./reports.js?v=20260831-task-resolution-1";
 import { createTeamModule } from "./team.js?v=20260826-member-phone-login-1";
@@ -101,8 +102,12 @@ export async function showDashboard({ supabase, session }) {
     }).join("") : '<p class="tasks-empty">Create a project to see its operations dashboard.</p>';
   }
   loadOperationsMetrics();
+  const { data: paperworkAccess, error: paperworkAccessError } = await supabase.rpc("can_access_paperwork", { p_company_id: membership.companies.id });
+  const canPaperwork = !paperworkAccessError && paperworkAccess === true;
+  document.querySelector("#paperworkNav").hidden = !canPaperwork;
   const views = {
-    dashboard: document.querySelector("#dashboardView > .dashboard-content"),
+    paperwork: document.querySelector("#paperworkView"),
+    dashboard: document.querySelector("#dashboardView > .dashboard-content[aria-labelledby=dashboardTitle]"),
     projects: document.querySelector("#projectsView"),
     reports: document.querySelector("#reportsView"),
     tasks: document.querySelector("#tasksView"),
@@ -118,6 +123,7 @@ export async function showDashboard({ supabase, session }) {
   const modules = {};
   function navigate(name) {
     if (employeeOnly) name = "labor";
+    if (name === "paperwork" && !canPaperwork) name = "dashboard";
     Object.entries(views).forEach(([key, view]) => { view.hidden = key !== name; });
     let activeNav;
     document.querySelectorAll(".nav-item").forEach((item) => {
@@ -149,6 +155,7 @@ export async function showDashboard({ supabase, session }) {
   modules.alerts = createAlertsModule(operationsAccess);
   modules.team = createTeamModule({ supabase, session, companyId: membership.companies.id, canManage, managerRole: membership.role });
   modules.dashboard = { load: loadOperationsMetrics };
+  if (canPaperwork) modules.paperwork = createPaperworkModule({ supabase, companyId: membership.companies.id });
   if (employeeOnly) {
     document.querySelector("#laborView").innerHTML = '<header class="dashboard-header"><div><p class="eyebrow">Worker access paused</p><h1>Time entry</h1></div></header><section class="workspace-card"><h2>Your manager records work hours</h2><p>Worker check-in and check-out are currently managed by the office. No action is required here.</p></section>';
     document.querySelectorAll(".nav-item").forEach((item) => { item.hidden = item.getAttribute("href") !== "#labor"; });

@@ -9,7 +9,8 @@
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/login.css">
     <link rel="stylesheet" href="/css/dashboard.css?v=20260826-member-phone-login-1">
-    <script type="module" src="/js/app.js?v=20260831-task-resolution-1"></script>
+    <script type="module" src="/js/app.js?v=20260924-paperwork-1"></script>
+    <link rel="stylesheet" href="/css/paperwork.css?v=20260924-1">
   </head>
   <body>
     <main id="loginView" class="login-layout">
@@ -108,6 +109,7 @@
           <a class="nav-item" href="#subcontractors"><span aria-hidden="true">♢</span> Subcontractors</a>
           <a class="nav-item" href="#files"><span aria-hidden="true">▤</span> Files &amp; Photos</a>
           <a class="nav-item" href="#alerts"><span aria-hidden="true">!</span> Alerts <b id="alertCount" class="nav-count">0</b></a>
+          <a id="paperworkNav" class="nav-item" href="#paperwork" hidden><span aria-hidden="true">▤</span> Paperwork</a>
           <a id="teamNav" class="nav-item" href="#team">
             <span aria-hidden="true">♙</span> Users
           </a>
@@ -118,6 +120,7 @@
         </div>
       </aside>
 
+      <section id="paperworkView" class="dashboard-content" hidden></section>
       <section class="dashboard-content" aria-labelledby="dashboardTitle">
         <header class="dashboard-header">
           <div>
