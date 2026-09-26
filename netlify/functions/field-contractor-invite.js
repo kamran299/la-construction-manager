@@ -10,7 +10,7 @@ export default async function handler(request){
  const raw=await request.text();if(raw.length>4000)return reply(413,{error:'Request too large'});const b=JSON.parse(raw),channels=b.channels||['email'];
  if(!Array.isArray(channels)||!channels.length||channels.length>2||channels.some(c=>!['email','sms'].includes(c)))return reply(400,{error:'Choose email, SMS or both.'});
  const site=new URL(origin).origin;
- const rpc=async(name,data)=>{const r=await fetch(`${url}/rest/v1/rpc/${name}`,{method:'POST',headers,body:JSON.stringify(data),signal:AbortSignal.timeout(8000)});const d=await r.json();if(!r.ok)throw Error(d.message||'Access denied');return d};
+ const rpc=async(name,data)=>{const r=await fetch(`${url}/rest/v1/rpc/${name}`,{method:'POST',headers,body:JSON.stringify(data),signal:AbortSignal.timeout(8000)});const text=await r.text();let d=null;try{d=text?JSON.parse(text):null;}catch{throw Error('Invalid database response');}if(!r.ok)throw Error(d?.message||'Access denied');return d};
  let profile=null;
  if(b.action==='invite')profile=await rpc('invite_contractor_channels',{p_company:b.company_id,p_email:b.email||null,p_phone:normalizePhone(b.phone)||null,p_name:b.name,p_channels:channels});
  else if(['send_bid','retry_bid'].includes(b.action)){if(b.action==='send_bid')await rpc('open_bid_package',{p_id:b.package_id});}
